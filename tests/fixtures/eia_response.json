@@ -1,0 +1,16 @@
+{
+  "response": {
+    "total": "1",
+    "data": [
+      {
+        "period": "2026-03-27T00",
+        "respondent": "MISO",
+        "respondent-name": "Midcontinent ISO",
+        "type": "D",
+        "type-name": "Demand",
+        "value": "1234.5",
+        "value-units": "megawatthours"
+      }
+    ]
+  }
+}

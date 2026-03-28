@@ -1,3 +1,24 @@
+## [2026-03-28 Round 8]
+
+### Completed
+- Completed `TESTING.md` Section 2.2 unit-test coverage for extraction and loading helpers in `airflow/dags/eia_grid_batch_tasks.py`
+
+### Files Added/Modified
+- `tests/unit/test_eia_grid_batch_tasks.py`
+- `tests/fixtures/eia_response.json`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No interface changes
+
+### Tests Added/Passed
+- Added: pytest coverage for API request construction, retry handling, response validation, GCS raw landing, and BigQuery raw load configuration
+- Passed: `uv run pytest tests/unit/test_eia_grid_batch_tasks.py`
+- Passed: `uv run ruff check tests/unit/test_eia_grid_batch_tasks.py`
+
+### Known Issues
+- None
+
 ## [2026-03-28 Round 7]
 
 ### Completed
