@@ -8,4 +8,12 @@ model-paths: ["models"]
 macro-paths: ["macros"]
 clean-targets: ["target", "dbt_packages"]
 
-models: {}
+models:
+  voltage_hub:
+    +persist_docs:
+      relation: true
+      columns: true
+    staging:
+      +schema: "{{ env_var('BQ_DATASET_STAGING', 'staging') }}"
+    marts:
+      +schema: "{{ env_var('BQ_DATASET_MARTS', 'marts') }}"

@@ -1,0 +1,66 @@
+version: 2
+
+models:
+  - name: fct_grid_metrics
+    description: Canonical mart fact table at the observation grain for all grid metrics.
+    columns:
+      - name: metric_surrogate_key
+        description: Surrogate key inherited from staging for the metric observation grain.
+        data_tests:
+          - not_null
+          - unique
+      - name: region
+        description: Balancing area code for the observation.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_region')
+              field: region
+      - name: region_name
+        description: Human-readable balancing area name for the observation.
+      - name: observation_timestamp
+        description: Timestamp at which the metric was observed.
+        data_tests:
+          - not_null
+      - name: observation_date
+        description: Date derived from the observation timestamp and used for partitioning.
+        data_tests:
+          - not_null
+      - name: metric_name
+        description: Canonical metric type for the observation.
+        data_tests:
+          - not_null
+      - name: metric_value
+        description: Numeric metric value at the observation grain.
+        data_tests:
+          - not_null
+      - name: energy_source
+        description: Fuel type for generation observations; null for non-generation metrics.
+        data_tests:
+          - relationships:
+              to: ref('dim_energy_source')
+              field: energy_source
+      - name: unit
+        description: Canonical unit reported for the observation.
+      - name: _ingestion_timestamp
+        description: Ingestion timestamp inherited from the raw landing batch.
+
+  - name: dim_region
+    description: Region dimension keyed by balancing area code.
+    columns:
+      - name: region
+        description: Primary key for the balancing area.
+        data_tests:
+          - not_null
+          - unique
+      - name: region_name
+        description: Latest known human-readable balancing area name.
+
+  - name: dim_energy_source
+    description: Energy source dimension keyed by canonical fuel type.
+    columns:
+      - name: energy_source
+        description: Primary key for the canonical energy source.
+        data_tests:
+          - not_null
+          - unique

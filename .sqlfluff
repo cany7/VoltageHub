@@ -1,0 +1,7 @@
+[sqlfluff]
+dialect = bigquery
+templater = dbt
+
+[sqlfluff:templater:dbt]
+project_dir = dbt
+profiles_dir = dbt

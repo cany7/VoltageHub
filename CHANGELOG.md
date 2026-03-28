@@ -1,3 +1,81 @@
+## [2026-03-28 Round 10]
+
+### Completed
+- Completed `Task 1.6` by implementing the mart core models, aggregate models, relationship tests, and mart dataset routing for dbt
+- Completed `Task 1.7` by creating the project `Makefile`, validating all target command mappings, and running the real `dbt-build`, `dbt-docs`, and `lint` targets
+
+### Files Added/Modified
+- `dbt/dbt_project.yml`
+- `dbt/macros/generate_schema_name.sql`
+- `dbt/models/staging/stg_grid_metrics.sql`
+- `dbt/models/marts/core/fct_grid_metrics.sql`
+- `dbt/models/marts/core/dim_region.sql`
+- `dbt/models/marts/core/dim_energy_source.sql`
+- `dbt/models/marts/core/schema.yml`
+- `dbt/models/marts/aggregates/agg_load_hourly.sql`
+- `dbt/models/marts/aggregates/agg_load_daily.sql`
+- `dbt/models/marts/aggregates/agg_generation_mix.sql`
+- `dbt/models/marts/aggregates/agg_top_regions.sql`
+- `dbt/models/marts/aggregates/schema.yml`
+- `.sqlfluff`
+- `Makefile`
+- `DOCS/TASKS.md`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No API contract changes; implemented the documented mart contracts in `marts.fct_grid_metrics`, `marts.dim_region`, `marts.dim_energy_source`, `marts.agg_load_hourly`, `marts.agg_load_daily`, `marts.agg_generation_mix`, and `marts.agg_top_regions`
+- Added `dbt` macro override so folder `+schema` values resolve directly to the documented BigQuery datasets (`staging`, `marts`) instead of dbt's default concatenated schema names
+- Assumption: `agg_generation_mix` exposes `daily_total_generation` plus `unit` at the documented grain `region × observation_date × energy_source` so the column naming stays aligned with the daily aggregate convention used by `daily_total_load`
+- Assumption: `Makefile` backfills require explicit `START_DATE` and `END_DATE` inputs so CLI usage stays deterministic across shells and environments
+- Assumption: `agg_top_regions.rank` uses BigQuery `rank()` semantics, so ties share the same rank and skip the next value
+
+### Tests Added/Passed
+- Passed: `docker compose exec airflow-webserver dbt deps --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt`
+- Passed: `docker compose exec airflow-webserver dbt build --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt --target dev --vars '{"batch_date": "2026-03-27"}'`
+- Passed: `docker compose exec airflow-webserver dbt docs generate --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt --target dev`
+- Passed: `make dbt-build BATCH_DATE=2026-03-27`
+- Passed: `make dbt-docs`
+- Passed: `make lint`
+- Passed: `make -n up down build backfill dbt-build dbt-docs dbt-deps lint terraform-init terraform-apply terraform-destroy clean`
+- Passed: `uv run ruff check .`
+
+### Known Issues
+- Earlier validation runs created tables in misrouted datasets such as `staging_staging` / `staging_marts` before the schema-name macro fix; these legacy datasets were not deleted in this round to avoid destructive cleanup outside the requested scope
+
+## [2026-03-28 Round 9]
+
+### Completed
+- Completed `Task 1.4` by adding the `eia_grid_batch` Airflow DAG with the required task order, default schedule/retry/timeout settings, and successful end-to-end DAG validation
+- Completed `Task 1.5` by implementing the dbt staging project, source definition, profile, canonical staging model, and staging data tests
+
+### Files Added/Modified
+- `airflow/dags/eia_grid_batch.py`
+- `dbt/dbt_project.yml`
+- `dbt/packages.yml`
+- `dbt/profiles.yml`
+- `dbt/models/sources.yml`
+- `dbt/models/staging/stg_grid_metrics.sql`
+- `dbt/models/staging/schema.yml`
+- `DOCS/TASKS.md`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No interface contract changes; this round implemented the existing Airflow DAG and `staging.stg_grid_metrics` contract from `SPEC.md` / `INTERFACES.md`
+- Assumption: the configurable DAG schedule and optional explicit start date are read from Airflow Variables `pipeline_schedule` and `pipeline_start_date`, with defaults of `@hourly` and `BACKFILL_DAYS=7`
+- Assumption: until Phase 2 tasks are implemented, `check_anomalies`, `record_run_metrics`, and `update_pipeline_state` run as no-op placeholders so the required DAG chain can execute end to end without inventing meta-table writes early
+- Assumption: non-fuel region metrics are standardized to snake_case labels derived from upstream `type_name` so observed categories such as `demand`, `day_ahead_demand_forecast`, `net_generation`, and `total_interchange` remain explicit in staging
+
+### Tests Added/Passed
+- Passed: `uv run ruff check airflow/dags/eia_grid_batch.py airflow/dags/eia_grid_batch_tasks.py`
+- Passed: `uv run python -m py_compile airflow/dags/eia_grid_batch.py airflow/dags/eia_grid_batch_tasks.py`
+- Passed: `docker compose exec airflow-webserver python -c 'from airflow.models import DagBag; ...'` confirmed `eia_grid_batch` loads with no import errors
+- Passed: `docker compose exec airflow-webserver dbt deps --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt`
+- Passed: `docker compose exec airflow-webserver dbt build --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt --target dev --vars '{"batch_date": "2026-03-27"}'`
+- Passed: `docker compose exec airflow-webserver airflow dags test eia_grid_batch 2026-03-27T02:00:00+00:00`
+
+### Known Issues
+- `Task 2.2`, `Task 2.3`, and `Task 2.4` still need the real meta-table writers for run metrics, pipeline state, freshness logging, and anomaly detection; the DAG currently preserves those task slots with explicit placeholders
+
 ## [2026-03-28 Round 8]
 
 ### Completed

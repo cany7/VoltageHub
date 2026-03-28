@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: raw
+    database: "{{ env_var('GCP_PROJECT_ID') }}"
+    schema: "{{ env_var('BQ_DATASET_RAW', 'raw') }}"
+    tables:
+      - name: eia_grid_batch
+        description: Raw EIA grid batch rows landed by the Airflow extraction tasks.
+        loaded_at_field: _ingestion_timestamp
+        freshness:
+          warn_after:
+            count: 6
+            period: hour
+          error_after:
+            count: 12
+            period: hour

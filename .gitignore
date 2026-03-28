@@ -163,6 +163,10 @@ keys/*.json
 terraform.tfstate
 terraform.tfstate.*
 terraform/terraform.tfvars
+dbt/.user.yml
+dbt/dbt_packages/
+dbt/target/
+dbt/logs/
 
 DOCS/
 SPEC_zh.md

@@ -1,0 +1,68 @@
+version: 2
+
+models:
+  - name: agg_load_hourly
+    description: Hourly demand metrics by region for direct serving-layer reads.
+    columns:
+      - name: region
+        description: Balancing area code for the hourly demand observation.
+      - name: region_name
+        description: Human-readable balancing area name.
+      - name: observation_timestamp
+        description: Timestamp for the hourly demand observation.
+      - name: observation_date
+        description: Date derived from the observation timestamp.
+      - name: hourly_load
+        description: Demand metric value at the hourly grain.
+      - name: unit
+        description: Unit associated with the demand metric.
+
+  - name: agg_load_daily
+    description: Daily demand summaries by region with aggregate statistics.
+    columns:
+      - name: region
+        description: Balancing area code for the daily summary.
+      - name: region_name
+        description: Human-readable balancing area name.
+      - name: observation_date
+        description: Date of the demand summary.
+      - name: avg_load
+        description: Average demand observed for the region on the date.
+      - name: min_load
+        description: Minimum demand observed for the region on the date.
+      - name: max_load
+        description: Maximum demand observed for the region on the date.
+      - name: total_load
+        description: Sum of demand values observed for the region on the date.
+      - name: unit
+        description: Unit associated with the demand metrics.
+
+  - name: agg_generation_mix
+    description: Daily generation totals by region and energy source.
+    columns:
+      - name: region
+        description: Balancing area code for the generation summary.
+      - name: region_name
+        description: Human-readable balancing area name.
+      - name: observation_date
+        description: Date of the generation summary.
+      - name: energy_source
+        description: Canonical energy source represented in the summary row.
+      - name: daily_total_generation
+        description: Total generation value for the region, date, and energy source.
+      - name: unit
+        description: Unit associated with the generation metric.
+
+  - name: agg_top_regions
+    description: Daily ranked regions by total demand for direct top-N serving queries.
+    columns:
+      - name: observation_date
+        description: Date used for the ranking partition.
+      - name: region
+        description: Balancing area code included in the ranking.
+      - name: region_name
+        description: Human-readable balancing area name.
+      - name: daily_total_load
+        description: Total demand for the region on the ranked date.
+      - name: rank
+        description: Rank of the region within the date partition, where one is highest.

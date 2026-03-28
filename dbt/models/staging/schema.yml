@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: stg_grid_metrics
+    description: Canonicalized long-format grid metrics built from the raw EIA landing table.
+    columns:
+      - name: metric_surrogate_key
+        description: Surrogate key for the canonical metric grain.
+        data_tests:
+          - not_null
+          - unique
+      - name: region
+        description: Standardized balancing area code sourced from the respondent identifier.
+        data_tests:
+          - not_null
+      - name: region_name
+        description: Human-readable balancing area name.
+      - name: observation_timestamp
+        description: Parsed timestamp for the observed grid metric.
+        data_tests:
+          - not_null
+      - name: observation_date
+        description: Date partition derived from the observation timestamp.
+      - name: metric_name
+        description: Standardized metric category used by downstream marts.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values:
+                [
+                  "demand",
+                  "day_ahead_demand_forecast",
+                  "net_generation",
+                  "total_interchange",
+                  "generation",
+                ]
+      - name: metric_value
+        description: Numeric metric value as reported by the source.
+        data_tests:
+          - not_null
+      - name: energy_source
+        description: Standardized energy source code for generation metrics.
+      - name: unit
+        description: Standardized metric unit.
+      - name: _ingestion_timestamp
+        description: Pipeline ingestion timestamp passed through from raw.
