@@ -1,0 +1,80 @@
+[
+  {
+    "name": "respondent",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Source-level entity or balancing authority identifier."
+  },
+  {
+    "name": "respondent_name",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Human-readable name from the source response."
+  },
+  {
+    "name": "type",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Source response category such as demand or generation."
+  },
+  {
+    "name": "type_name",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Human-readable type label from the source."
+  },
+  {
+    "name": "value",
+    "type": "FLOAT64",
+    "mode": "REQUIRED",
+    "description": "Reported metric value from the source."
+  },
+  {
+    "name": "value_units",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Unit of measurement as reported by the source."
+  },
+  {
+    "name": "period",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Observation period string as returned by the source."
+  },
+  {
+    "name": "fueltype",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Fuel type code for generation-related rows."
+  },
+  {
+    "name": "fueltype_name",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Human-readable fuel type label."
+  },
+  {
+    "name": "batch_date",
+    "type": "DATE",
+    "mode": "REQUIRED",
+    "description": "Extraction batch date used as the partition key."
+  },
+  {
+    "name": "_batch_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Pipeline-generated identifier for the extraction batch."
+  },
+  {
+    "name": "_source_url",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Source endpoint URL used for the batch extract."
+  },
+  {
+    "name": "_ingestion_timestamp",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Pipeline-generated ingestion timestamp."
+  }
+]

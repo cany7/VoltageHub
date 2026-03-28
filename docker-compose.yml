@@ -46,6 +46,7 @@ services:
       - "8080:8080"
     volumes:
       - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/schemas:/opt/airflow/schemas
       - ./airflow/plugins:/opt/airflow/plugins
       - ./dbt:/opt/airflow/dbt
       - ./keys/service-account.json:/opt/airflow/keys/service-account.json:ro
@@ -73,6 +74,7 @@ services:
       "
     volumes:
       - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/schemas:/opt/airflow/schemas
       - ./airflow/plugins:/opt/airflow/plugins
       - ./dbt:/opt/airflow/dbt
       - ./keys/service-account.json:/opt/airflow/keys/service-account.json:ro
