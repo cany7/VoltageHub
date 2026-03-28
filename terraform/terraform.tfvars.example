@@ -1,0 +1,7 @@
+project_id         = "voltage-hub-dev"
+region             = "us-central1"
+bucket_name        = "voltage-hub-raw"
+bq_dataset_raw     = "raw"
+bq_dataset_staging = "staging"
+bq_dataset_marts   = "marts"
+bq_dataset_meta    = "meta"

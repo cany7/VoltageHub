@@ -157,6 +157,13 @@ cython_debug/
 
 # PyCharm
 .idea/
+.DS_Store
+keys/*.json
+.terraform/
+terraform.tfstate
+terraform.tfstate.*
+terraform/terraform.tfvars
 
 DOCS/
 SPEC_zh.md
+AGENTS.md
