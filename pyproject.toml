@@ -1,0 +1,21 @@
+[project]
+name = "voltage-hub"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "google-cloud-bigquery>=3.40.1",
+    "google-cloud-storage>=3.10.1",
+    "requests>=2.33.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-cov>=7.1.0",
+    "requests-mock>=1.12.1",
+    "ruff>=0.15.8",
+    "sqlfluff>=4.1.0",
+    "sqlfluff-templater-dbt>=4.1.0",
+]
