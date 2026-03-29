@@ -1,3 +1,313 @@
+## [2026-03-28 Round 23]
+
+### Completed
+- Executed the isolated failure-path integration flow end to end against real Airflow and BigQuery resources
+- Verified that the temporary failure-path datasets are deleted after the run and do not remain in the project
+
+### Files Added/Modified
+- `tests/integration/test_pipeline_e2e.py`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No runtime pipeline interface changes
+- Failure-path freshness validation now uses test-run-relative staleness thresholds and isolated temporary datasets, which allows deterministic source-level warn/error checks without requiring a follow-up smoke recovery run
+
+### Tests Added/Passed
+- Passed: `set -a; source .env; set +a; VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 VOLTAGE_HUB_RUN_FAILURE_PATH_PIPELINE_TESTS=1 .venv/bin/pytest -rs tests/integration/test_pipeline_e2e.py` (`5 passed, 2 skipped`)
+- Verified: `bq ls --format=prettyjson --project_id=voltage-hub-dev` shows only `raw`, `staging`, `marts`, and `meta` after the failure-path run
+
+### Known Issues
+- Heavy rerun/backfill validation remains opt-in and was not executed in this round
+
+## [2026-03-28 Round 22]
+
+### Completed
+- Reworked the failure-path freshness integration flow to use isolated temporary datasets instead of mutating the shared development datasets
+- Updated the testing documentation and root guide to reflect that failure-path data is now self-cleaning and no longer requires a smoke recovery run
+
+### Files Added/Modified
+- `tests/integration/test_pipeline_e2e.py`
+- `DOCS/TESTING.md`
+- `TEST_RUN_GUIDE.txt`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No runtime pipeline interface changes
+- Failure-path freshness checks now create and delete isolated `raw/staging/marts/meta` datasets during the test run, so they can deterministically validate source-level freshness without polluting the shared development environment
+
+### Tests Added/Passed
+- Pending: execute the isolated failure-path integration run
+
+### Known Issues
+- The failure-path run still validates `dbt source freshness`; it does not yet run the full DAG against the isolated datasets
+
+## [2026-03-28 Round 21]
+
+### Completed
+- Corrected the failure-path freshness integration flow so it respects source-level freshness semantics in shared datasets
+- The warn/error freshness tests now skip when fresher batches elsewhere in the raw source make a deterministic threshold breach impossible
+
+### Files Added/Modified
+- `tests/integration/test_pipeline_e2e.py`
+- `TEST_RUN_GUIDE.txt`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No runtime interface changes
+- Failure-path freshness tests no longer assume that mutating one raw batch can always force `dbt source freshness` to warn or fail at the whole-source level
+
+### Tests Added/Passed
+- Not run yet: post-edit validation pending
+
+### Known Issues
+- To deterministically force source-level freshness warn/error in all cases, these tests still need either isolated datasets or a broader source-wide staleness setup
+
+## [2026-03-28 Round 20]
+
+### Completed
+- Made the heavy backfill integration window count configurable through `VOLTAGE_HUB_TEST_BACKFILL_HOURS` while keeping the default behavior at 2 hourly windows
+- Updated the root test-run guide to document how to pass the backfill duration environment variable inline with the heavy test command
+
+### Files Added/Modified
+- `tests/integration/test_pipeline_e2e.py`
+- `TEST_RUN_GUIDE.txt`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No runtime pipeline behavior changes
+- Heavy integration execution now supports configurable backfill depth via `VOLTAGE_HUB_TEST_BACKFILL_HOURS`; default remains 2 hourly windows
+
+### Tests Added/Passed
+- Not run yet: post-edit validation pending
+
+### Known Issues
+- Failure-path freshness integration remains opt-in and still requires a recovery smoke run after execution
+
+## [2026-03-28 Round 19]
+
+### Completed
+- Added the remaining pending test-flow code for targeted Phase 2 freshness/failure-path validation without enabling those flows in the default smoke suite
+- Added a failed-run metrics unit test and opt-in integration scaffolding for freshness warn/error threshold checks
+
+### Files Added/Modified
+- `pyproject.toml`
+- `tests/unit/test_eia_grid_batch_tasks.py`
+- `tests/integration/test_pipeline_e2e.py`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No runtime interface changes
+- Integration coverage now distinguishes three opt-in modes: default smoke, heavy rerun/backfill, and targeted failure-path freshness checks
+
+### Tests Added/Passed
+- Passed: `uv run python -m py_compile tests/unit/test_eia_grid_batch_tasks.py tests/unit/test_dbt_testing_contracts.py tests/integration/test_pipeline_e2e.py`
+- Passed: `uv run ruff check pyproject.toml tests/unit/test_eia_grid_batch_tasks.py tests/unit/test_dbt_testing_contracts.py tests/integration/test_pipeline_e2e.py`
+- Passed: `uv run pytest -q tests/unit/test_eia_grid_batch_tasks.py tests/unit/test_dbt_testing_contracts.py tests/integration/test_pipeline_e2e.py` (`18 passed, 7 skipped`)
+- Passed: `set -a; source .env; set +a; VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 .venv/bin/pytest -rs tests/integration/test_pipeline_e2e.py` (`3 passed, 4 skipped`)
+
+### Known Issues
+- The targeted freshness warn/error integration flows were added as opt-in scaffolding and were not executed in this round
+- Heavy rerun/backfill validation remains opt-in and was not executed in this round
+
+## [2026-03-28 Round 18]
+
+### Completed
+- Expanded `TESTING.md` to document the still-missing execution flows for real freshness warn/error validation and real failure-path `meta.run_metrics` validation
+
+### Files Added/Modified
+- `DOCS/TESTING.md`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No code or interface changes; the testing specification now explicitly distinguishes smoke, heavy, and failure-path validation for Phase 2 control-plane behavior
+
+### Tests Added/Passed
+- Not run: documentation-only update
+
+### Known Issues
+- The newly documented freshness-threshold and failure-path validation flows are still pending implementation as executable tests or operational checklists
+
+## [2026-03-28 Round 17]
+
+### Completed
+- Completed remaining automated test coverage for `TESTING.md` Sections `2.3`, `2.4`, and `2.5`
+- Added static contract tests for the required dbt quality gates and source freshness configuration
+- Added unit coverage for two-signal freshness logging and warning-only anomaly behavior
+- Added the missing smoke-path date-boundary integration test for a window that spans midnight UTC
+
+### Files Added/Modified
+- `tests/unit/test_dbt_testing_contracts.py`
+- `tests/unit/test_eia_grid_batch_tasks.py`
+- `tests/integration/test_pipeline_e2e.py`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No runtime interface or warehouse schema changes
+- Smoke integration coverage now includes the documented cross-midnight partition rebuild scenario in addition to the existing single-window and meta-output checks
+
+### Tests Added/Passed
+- Passed: `uv run python -m py_compile tests/unit/test_eia_grid_batch_tasks.py tests/unit/test_dbt_testing_contracts.py tests/integration/test_pipeline_e2e.py`
+- Passed: `uv run ruff check tests/unit/test_eia_grid_batch_tasks.py tests/unit/test_dbt_testing_contracts.py tests/integration/test_pipeline_e2e.py`
+- Passed: `uv run pytest -q tests/unit/test_eia_grid_batch_tasks.py tests/unit/test_dbt_testing_contracts.py tests/integration/test_pipeline_e2e.py` (`17 passed, 5 skipped`)
+- Passed: `set -a; source .env; set +a; VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 .venv/bin/pytest -rs tests/integration/test_pipeline_e2e.py` (`3 passed, 2 skipped`)
+
+### Known Issues
+- The heavy integration path remains opt-in and was not run in this round: idempotent rerun and multi-window backfill still require `VOLTAGE_HUB_RUN_HEAVY_PIPELINE_TESTS=1`
+
+## [2026-03-28 Round 16]
+
+### Completed
+- Aligned the documented Voltage Hub `energy_source` / fuel-code contract with the implemented dbt accepted-values gate by preserving `BIO`, `HPS`, and `HYC` in the published docs
+
+### Files Added/Modified
+- `DOCS/SPEC.md`
+- `DOCS/INTERFACES.md`
+- `DOCS/TESTING.md`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No runtime code changes; the published documentation contract for allowed `energy_source` values now explicitly includes `BIO`, `HPS`, and `HYC` to match the current dbt quality gate
+
+### Tests Added/Passed
+- Not run yet: post-edit documentation consistency checks
+
+### Known Issues
+- `TESTING.md` Section `2.5` still documents the date-boundary integration scenario as required, but the automated test coverage for that case has not yet been added
+
+## [2026-03-28 Round 15]
+
+### Completed
+- Clarified `TESTING.md` Section `2.5` by promoting the date-boundary window rebuild scenario into the formal end-to-end integration test checklist
+
+### Files Added/Modified
+- `DOCS/TESTING.md`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No code or interface changes; documentation now treats cross-midnight partition rebuild validation as an explicit `2.5` integration test requirement rather than only a high-risk note
+
+### Tests Added/Passed
+- Not run: documentation-only update
+
+### Known Issues
+- The date-boundary window integration scenario is now explicitly required in `TESTING.md`, but it is still not implemented as an automated test
+
+## [2026-03-28 Round 14]
+
+### Completed
+- Refined the `TESTING.md` Section `2.5` integration harness by separating smoke-path checks from heavier rerun/backfill checks
+- Clarified the Airflow execution-timestamp semantics used by the integration tests and aligned the energy-source accepted-values contract with the published interface docs
+
+### Files Added/Modified
+- `tests/integration/test_pipeline_e2e.py`
+- `pyproject.toml`
+- `dbt/models/staging/schema.yml`
+- `.env.example`
+- `DOCS/TESTING.md`
+- `DOCS/INTERFACES.md`
+- `DOCS/ARCHITECTURE.md`
+- `DOCS/SPEC.md`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No data-plane or API behavior changes; integration tests now use clearer `airflow_execution_date` / extraction-window naming to match Airflow's hourly interval semantics
+- Added optional test-only environment variables for smoke vs. heavy integration execution and documented them in the project config references
+- The documented `energy_source` contract now explicitly lists the Voltage Hub fuel-code set that the dbt accepted-values gate enforces
+
+### Tests Added/Passed
+- Passed: `python -m py_compile tests/integration/test_pipeline_e2e.py`
+- Passed: `.venv/bin/ruff check tests/integration/test_pipeline_e2e.py pyproject.toml`
+- Passed: `.venv/bin/pytest tests/integration/test_pipeline_e2e.py` (default path: 4 skipped without real-resource env enabled)
+- Passed: `VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 .venv/bin/pytest -rs tests/integration/test_pipeline_e2e.py` with smoke scope (`2 passed, 2 skipped`)
+
+### Known Issues
+- The heavy rerun/backfill integration path still requires real GCP resources plus `VOLTAGE_HUB_RUN_HEAVY_PIPELINE_TESTS=1`; it remains intentionally opt-in because of runtime cost
+
+## [2026-03-28 Round 13]
+
+### Completed
+- Tightened the Phase 2 control-plane contract by documenting the meta-table creation mechanism, formalizing freshness and anomaly edge rules, and replacing dbt artifact path guessing with an explicit `DBT_RUN_RESULTS_PATH` setting
+
+### Files Added/Modified
+- `airflow/dags/eia_grid_batch_tasks.py`
+- `.env.example`
+- `DOCS/ARCHITECTURE.md`
+- `DOCS/INTERFACES.md`
+- `DOCS/SPEC.md`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No API endpoint contract changes; control-plane documentation now explicitly states that Airflow creates meta tables on demand before writing them
+- Formalized the default `data_freshness_status` threshold as 6 hours in the project spec and interfaces contract
+- Formalized anomaly edge behavior: the rolling baseline uses the prior 7 calendar days, and missing/zero baselines produce `pct_deviation = NULL` with `anomaly_flag = FALSE`
+- Replaced implicit dbt artifact path guessing with explicit configuration via `DBT_RUN_RESULTS_PATH` (default `/opt/airflow/dbt/target/run_results.json`)
+
+### Tests Added/Passed
+- Not run: unit, integration, dbt, and Airflow execution tests per current request
+
+### Known Issues
+- The new `DBT_RUN_RESULTS_PATH` contract is documented and wired, but it has not yet been exercised through a live Airflow/dbt run in this round
+
+## [2026-03-28 Round 12]
+
+### Completed
+- Corrected the `Task 2.1`, `Task 2.2`, `Task 2.3`, and `Task 2.4` control-plane implementation so the DAG behavior and meta-table documentation align more strictly with `SPEC.md`, `ARCHITECTURE.md`, and `INTERFACES.md`
+
+### Files Added/Modified
+- `airflow/dags/eia_grid_batch.py`
+- `airflow/dags/eia_grid_batch_tasks.py`
+- `dbt/models/meta/schema.yml`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No serving API contract changes; `record_run_metrics` can now persist `"failed"` status on unsuccessful runs instead of only ever writing `"success"`
+- `check_anomalies` is now warning-only in task behavior: internal failures are logged and returned as warnings rather than raising exceptions that stop the DAG
+- `check_anomalies` now reads mart aggregate tables instead of `marts.fct_grid_metrics`, and its rolling baseline uses the prior 7 calendar days rather than the prior 7 rows
+- `dbt/models/meta/schema.yml` now documents the meta tables as dbt `sources` instead of dbt `models`, matching the documented ownership that Airflow creates and writes these tables
+- Assumption: anomaly detection should evaluate the documented mart aggregate layer using daily `demand` from `marts.agg_load_daily` plus daily total `generation` rolled up from `marts.agg_generation_mix`, because the meta anomaly contract includes `metric_name` but no `energy_source`
+
+### Tests Added/Passed
+- Passed: `uv run python -m py_compile airflow/dags/eia_grid_batch.py airflow/dags/eia_grid_batch_tasks.py`
+- Not run: full unit, integration, dbt, or Airflow execution tests per current request
+
+### Known Issues
+- `meta.run_metrics` still depends on Airflow task-state inspection and available dbt artifacts; if you later want stricter failure-path guarantees, the next useful step would be a targeted Airflow-path test rather than a full suite run
+
+## [2026-03-28 Round 11]
+
+### Completed
+- Completed `Task 2.1`, `Task 2.2`, `Task 2.3`, and `Task 2.4` by replacing the control-plane placeholders with real meta-table writes, dual-signal freshness logging, and warning-only anomaly detection
+- Completed `TESTING.md` Section `2.3` by aligning dbt quality gates with the required staging and mart invariants
+- Completed `TESTING.md` Section `2.5` by adding executable end-to-end integration tests for single-window runs, meta outputs, idempotent reruns, and two-window backfill validation
+
+### Files Added/Modified
+- `airflow/dags/eia_grid_batch.py`
+- `airflow/dags/eia_grid_batch_tasks.py`
+- `dbt/models/staging/schema.yml`
+- `dbt/models/marts/core/schema.yml`
+- `dbt/models/meta/schema.yml`
+- `tests/integration/test_pipeline_e2e.py`
+- `pyproject.toml`
+- `DOCS/TASKS.md`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No serving API contract changes; the DAG now persists `meta.pipeline_state`, `meta.run_metrics`, `meta.freshness_log`, and `meta.anomaly_results` according to the documented schemas
+- Added the missing staging `energy_source` accepted-values gate and mart grain-uniqueness gate required by `TESTING.md` / `SPEC.md`
+- Assumption: the consumer-facing `fresh` versus `stale` classification in `meta.freshness_log` uses the documented 6-hour warn threshold for both pipeline freshness and data freshness because no separate data-freshness threshold is specified
+- Assumption: the EIA fuel-type endpoint emits the observed short fuel codes (`BAT`, `BIO`, `COL`, `GEO`, `HPS`, `HYC`, `NG`, `NUC`, `OES`, `OIL`, `OTH`, `PS`, `SNB`, `SUN`, `UES`, `UNK`, `WAT`, `WNB`, `WND`) within current project scope
+
+### Tests Added/Passed
+- Added: `tests/integration/test_pipeline_e2e.py`
+- Passed: `python -m py_compile airflow/dags/eia_grid_batch.py airflow/dags/eia_grid_batch_tasks.py tests/integration/test_pipeline_e2e.py tests/unit/test_eia_grid_batch_tasks.py`
+- Passed: `.venv/bin/ruff check airflow/dags/eia_grid_batch.py airflow/dags/eia_grid_batch_tasks.py tests/integration/test_pipeline_e2e.py`
+- Passed: `.venv/bin/pytest tests/unit/test_eia_grid_batch_tasks.py`
+- Passed: `VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 .venv/bin/pytest -rs tests/integration/test_pipeline_e2e.py`
+- Verified: latest `meta.run_metrics` rows record non-zero dbt model/test counts and bytes processed
+
+### Known Issues
+- `airflow dags test` interprets its timestamp argument as the DAG run logical date (`data_interval_end` for the hourly schedule), so integration tests must derive the actual extraction window start as one hour earlier
+
 ## [2026-03-28 Round 10]
 
 ### Completed

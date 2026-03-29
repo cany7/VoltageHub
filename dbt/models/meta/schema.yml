@@ -1,0 +1,89 @@
+version: 2
+
+sources:
+  - name: meta
+    database: "{{ env_var('GCP_PROJECT_ID') }}"
+    schema: "{{ env_var('BQ_DATASET_META', 'meta') }}"
+    description: Control-plane tables created and populated by Airflow tasks rather than dbt models.
+    tables:
+      - name: pipeline_state
+        description: Control-plane watermark for the latest successful Voltage Hub batch window.
+        columns:
+          - name: pipeline_name
+            description: Stable pipeline identifier.
+          - name: last_successful_window_start
+            description: Start timestamp of the latest successfully processed window.
+          - name: last_successful_window_end
+            description: End timestamp of the latest successfully processed window.
+          - name: last_successful_run_id
+            description: Airflow run identifier for the latest successful window.
+          - name: updated_at
+            description: Timestamp when the watermark row was last updated.
+
+      - name: run_metrics
+        description: Per-run operational metrics captured by the Airflow control-plane tasks.
+        columns:
+          - name: run_id
+            description: Airflow run identifier.
+          - name: dag_id
+            description: DAG identifier that produced the run metrics row.
+          - name: execution_date
+            description: Logical execution timestamp for the run.
+          - name: window_start
+            description: Start of the processed extraction window.
+          - name: window_end
+            description: End of the processed extraction window.
+          - name: rows_loaded
+            description: Number of raw rows loaded into the BigQuery raw partition.
+          - name: dbt_models_passed
+            description: Count of dbt model nodes that succeeded for the run.
+          - name: dbt_tests_passed
+            description: Count of dbt test nodes that succeeded for the run.
+          - name: dbt_tests_failed
+            description: Count of dbt test nodes that failed for the run.
+          - name: bytes_processed
+            description: Total bytes processed across dbt BigQuery jobs when available.
+          - name: duration_seconds
+            description: End-to-end DAG duration in seconds for the run.
+          - name: status
+            description: Final DAG status for the run.
+          - name: created_at
+            description: Timestamp when the metrics row was written.
+
+      - name: freshness_log
+        description: Dual-signal freshness log capturing both ingestion freshness and source-data freshness.
+        columns:
+          - name: run_id
+            description: Airflow run identifier.
+          - name: pipeline_freshness_timestamp
+            description: Latest raw-layer ingestion timestamp observed during the check.
+          - name: data_freshness_timestamp
+            description: Latest staged observation timestamp observed during the check.
+          - name: pipeline_freshness_status
+            description: Freshness status derived from raw-layer ingestion recency.
+          - name: data_freshness_status
+            description: Freshness status derived from staged observation recency.
+          - name: checked_at
+            description: Timestamp when the dual-signal freshness check completed.
+
+      - name: anomaly_results
+        description: Warning-only anomaly detection output written after each successful dbt build.
+        columns:
+          - name: observation_date
+            description: Date of the aggregate metric evaluated for anomaly detection.
+          - name: region
+            description: Balancing area code for the anomaly candidate.
+          - name: metric_name
+            description: Metric category evaluated against its recent baseline.
+          - name: current_value
+            description: Current daily aggregate value for the metric and region.
+          - name: rolling_7d_avg
+            description: Rolling seven-day average used as the comparison baseline.
+          - name: pct_deviation
+            description: Percentage deviation between the current value and the rolling baseline.
+          - name: anomaly_flag
+            description: Whether the deviation exceeded the warning threshold.
+          - name: run_id
+            description: Airflow run identifier that produced the anomaly evaluation.
+          - name: checked_at
+            description: Timestamp when anomaly detection completed.

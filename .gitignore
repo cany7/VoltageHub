@@ -171,3 +171,4 @@ dbt/logs/
 DOCS/
 SPEC_zh.md
 AGENTS.md
+*.txt

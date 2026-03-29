@@ -19,3 +19,10 @@ dev = [
     "sqlfluff>=4.1.0",
     "sqlfluff-templater-dbt>=4.1.0",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests that exercise the real Airflow/GCS/BigQuery pipeline path",
+    "integration_heavy: marks the slower rerun/backfill pipeline tests that are opt-in by environment variable",
+    "integration_failure: marks targeted freshness/failure-path pipeline checks that intentionally create stale or failing conditions and are opt-in by environment variable",
+]

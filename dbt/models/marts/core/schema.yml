@@ -3,6 +3,13 @@ version: 2
 models:
   - name: fct_grid_metrics
     description: Canonical mart fact table at the observation grain for all grid metrics.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - region
+            - observation_timestamp
+            - metric_name
+            - energy_source
     columns:
       - name: metric_surrogate_key
         description: Surrogate key inherited from staging for the metric observation grain.
