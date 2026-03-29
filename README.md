@@ -1,4 +1,12 @@
+[🇺🇸 English](./README.md) | [🇨🇳 简体中文](./README_zh.md)
+
 # VoltageHub
+
+[![Python](https://img.shields.io/badge/Python-3.11%2B-blue)](./pyproject.toml)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![Airflow](https://img.shields.io/badge/Airflow-2.8%2B-017CEE?logo=apacheairflow)](https://airflow.apache.org/)
+[![dbt](https://img.shields.io/badge/dbt-1.7%2B-FF694B?logo=dbt)](https://www.getdbt.com/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 
 An end-to-end batch analytics data product built on EIA grid operations data, with Airflow orchestration, a layered BigQuery warehouse, and a FastAPI serving layer.
 
@@ -125,7 +133,7 @@ make dbt-deps
 
 Then trigger `eia_grid_batch` in Airflow and query the API at `http://localhost:8090`.
 
-For full environment setup, credentials, smoke tests, sample mode, and troubleshooting, see `DOCS/SETUP.md`.
+For full environment setup, credentials, smoke tests, sample mode, and troubleshooting, see [DOCS/SETUP.md](DOCS/SETUP.md).
 
 ## Demo
 
