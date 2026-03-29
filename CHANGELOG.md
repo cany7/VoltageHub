@@ -1,3 +1,246 @@
+## [2026-03-28 Round 35]
+
+### Completed
+- Completed `Task 3.6` for serving-layer exception handling, structured error responses, and request logging middleware
+- Prepared `Task 3.7` runtime surfaces by making the serving container honor `PORT`, but did not execute verification commands in this round
+
+### Files Added/Modified
+- `serving-fastapi/app/exceptions/base.py`
+- `serving-fastapi/app/exceptions/handlers.py`
+- `serving-fastapi/app/middleware/__init__.py`
+- `serving-fastapi/app/middleware/request_logging.py`
+- `serving-fastapi/app/main.py`
+- `serving-fastapi/Dockerfile`
+- `DOCS/TASKS.md`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- FastAPI request-validation failures now return structured JSON responses instead of the default FastAPI validation payload
+- Added request-level logging middleware that records method, path, query string, status code, request duration, client address, and an `x-request-id`
+- The serving container now starts `uvicorn` using `PORT` from the environment, defaulting to `8090`
+
+### Tests Added/Passed
+- Not run in this round per request; this round was limited to implementation work and did not execute serving verification commands
+
+### Known Issues
+- `Task 3.7` verification steps remain marked in progress because the requested no-testing workflow means the startup, endpoint, and Docker verification commands were not executed
+- Structured validation errors currently return a compact stringified detail payload; if a field-by-field error schema is later required, update the response contract and handlers together
+
+## [2026-03-28 Round 34]
+
+### Completed
+- Completed `Task 3.5` by adding in-memory TTL caching for hot aggregate serving queries
+
+### Files Added/Modified
+- `serving-fastapi/app/cache/query_cache.py`
+- `serving-fastapi/app/cache/__init__.py`
+- `serving-fastapi/app/config/settings.py`
+- `serving-fastapi/app/services/metrics.py`
+- `.env.example`
+- `DOCS/INTERFACES.md`
+- `DOCS/ARCHITECTURE.md`
+- `DOCS/TASKS.md`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- Added serving-layer `CACHE_TTL_SECONDS` configuration with a default of `300`
+- Metric endpoints now cache hot aggregate query results in memory using `cachetools.TTLCache`
+- Cache keys are derived from the endpoint identity plus request parameters; response metadata continues to be built from the latest `meta.*` lookups instead of the cached aggregate rows
+
+### Tests Added/Passed
+- Not run in this round per request; this round was limited to development work for `Task 3.5`
+
+### Known Issues
+- `Task 3.6+` remains unimplemented; custom exception expansion, request logging middleware, and full runtime verification are still pending
+- The in-memory cache is process-local by design and is cleared on restart, which matches the current single-service, no-external-cache architecture
+
+## [2026-03-28 Round 36]
+
+### Completed
+- Completed the offline CI expansion for Phase 3 by wiring the serving FastAPI unit test suite into GitHub Actions without adding any real GCP dependency
+- Completed `Task 4.1` verification update in `DOCS/TASKS.md` now that Phase 3 serving-layer tests are included in CI coverage
+
+### Files Added/Modified
+- `.github/workflows/lint.yml`
+- `DOCS/TASKS.md`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No API, warehouse, or runtime behavior changes
+- `lint.yml` now installs the serving API's locked dependencies in `serving-fastapi/` and runs the offline serving unit suite separately from the root project unit tests
+
+### Tests Added/Passed
+- Passed: `uv run ruff check .`
+- Passed: `uv run pytest -q tests/unit/test_eia_grid_batch_tasks.py tests/unit/test_dbt_testing_contracts.py` (`18 passed`)
+- Passed: `uv run sqlfluff lint --config .sqlfluff.ci dbt/models`
+- Passed: `cd serving-fastapi && UV_CACHE_DIR=/tmp/uv-cache uv sync --dev --frozen`
+- Passed: `cd serving-fastapi && uv run pytest -q ../tests/unit/serving_fastapi` (`23 passed`)
+
+### Known Issues
+- The CI expansion remains intentionally offline; real-resource serving integration tests stay out of standard GitHub Actions coverage for this personal-project setup
+
+## [2026-03-28 Round 35]
+
+### Completed
+- Executed the full Phase 3 serving-layer test suite against the current real cloud datasets and confirmed the opt-in integration coverage passes with populated `marts` and `meta` tables
+
+### Files Added/Modified
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No API, schema, config, or runtime behavior changes
+- This round records successful real-resource validation of the existing Phase 3 serving implementation
+
+### Tests Added/Passed
+- Passed: `set -a; source .env; set +a; cd serving-fastapi && UV_CACHE_DIR=/tmp/uv-cache VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 uv run pytest ../tests/unit/serving_fastapi ../tests/integration/test_serving_api.py -q` (`29 passed`)
+
+### Known Issues
+- No serving-layer failures were observed in this validation run
+
+## [2026-03-28 Round 34]
+
+### Completed
+- Completed the remaining serving-layer test flows from `TESTING.md Section 2.6` for invalid-parameter handling, request metadata headers, cache behavior, and real-resource-ready serving integration coverage
+- Added an opt-in serving API integration suite that validates control-plane and metric endpoints against populated BigQuery tables when real test mode is enabled
+
+### Files Added/Modified
+- `tests/unit/serving_fastapi/test_control_plane.py`
+- `tests/unit/serving_fastapi/test_metrics.py`
+- `tests/integration/test_serving_api.py`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No API contract or runtime behavior changes
+- Added serving test coverage for structured `validation_error` responses, `x-request-id` propagation, repeated-request cache hits within TTL, and env-gated integration validation against real `marts` / `meta` datasets
+
+### Tests Added/Passed
+- Passed: `uv run ruff check tests/unit/serving_fastapi/test_control_plane.py tests/unit/serving_fastapi/test_metrics.py`
+- Passed: `uv run ruff check tests/integration/test_serving_api.py`
+- Passed: `cd serving-fastapi && uv run pytest ../tests/unit/serving_fastapi -q` (`23 passed`)
+- Passed: `cd serving-fastapi && uv run pytest ../tests/integration/test_serving_api.py -q` (`6 skipped` without `VOLTAGE_HUB_RUN_PIPELINE_TESTS=1`)
+- Passed: `cd serving-fastapi && uv run pytest ../tests/unit/serving_fastapi ../tests/integration/test_serving_api.py -q` (`23 passed, 6 skipped`)
+- Passed: `uv run python -m compileall tests/unit/serving_fastapi tests/integration/test_serving_api.py`
+
+### Known Issues
+- The new serving integration suite is intentionally opt-in and was not executed against real BigQuery tables in this round because `VOLTAGE_HUB_RUN_PIPELINE_TESTS=1` was not enabled in the current environment
+
+## [2026-03-28 Round 33]
+
+### Completed
+- Completed additional `TESTING.md Section 2.6` coverage for the three metric data endpoints: load metrics, generation mix, and top regions
+- Completed explicit response metadata coverage for `data_as_of`, `pipeline_run_id`, and `freshness_status` on all three metric endpoint responses
+
+### Files Added/Modified
+- `tests/unit/serving_fastapi/test_metrics.py`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No API contract or runtime behavior changes
+- Strengthened serving-layer tests to assert metric response envelopes and metadata fallback behavior without modifying endpoint implementation
+
+### Tests Added/Passed
+- Passed: `uv run ruff check tests/unit/serving_fastapi/test_metrics.py`
+- Passed: `cd serving-fastapi && uv run pytest ../tests/unit/serving_fastapi/test_metrics.py -q` (`6 passed`)
+
+### Known Issues
+- These additions remain unit/interface-level tests with dependency overrides; `TESTING.md Section 2.6` integration coverage against a running FastAPI instance backed by populated real BigQuery tables is still pending
+
+## [2026-03-28 Round 32]
+
+### Completed
+- Completed `TESTING.md Section 2.6` coverage for `GET /health`, `GET /freshness`, `GET /pipeline/status`, and `GET /anomalies`
+
+### Files Added/Modified
+- `tests/unit/serving_fastapi/test_control_plane.py`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No API contract or runtime behavior changes
+- Added control-plane endpoint test coverage for empty-state and default-filter behavior without modifying serving implementation
+
+### Tests Added/Passed
+- Passed: `uv run ruff check tests/unit/serving_fastapi/test_control_plane.py`
+- Passed: `cd serving-fastapi && uv run pytest ../tests/unit/serving_fastapi/test_control_plane.py -q` (`9 passed`)
+
+### Known Issues
+- `TESTING.md Section 2.6` cases for metric endpoints, response metadata on data endpoints, invalid-parameter handling, and cache behavior remain pending because the corresponding serving-layer work is not in scope yet
+
+## [2026-03-28 Round 32]
+
+### Completed
+- Completed `Task 3.4` for the FastAPI metric endpoints backed by `marts.agg_*` plus shared response metadata from `meta.freshness_log` and `meta.pipeline_state`
+
+### Files Added/Modified
+- `serving-fastapi/app/repositories/metrics.py`
+- `serving-fastapi/app/services/metrics.py`
+- `serving-fastapi/app/routers/metrics.py`
+- `serving-fastapi/app/schemas/metrics.py`
+- `serving-fastapi/app/main.py`
+- `tests/unit/serving_fastapi/test_metrics.py`
+- `tests/unit/serving_fastapi/test_control_plane.py`
+- `DOCS/TASKS.md`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- Added `GET /metrics/load`, `GET /metrics/generation-mix`, and `GET /metrics/top-regions`
+- Metric endpoints query only `marts.agg_load_hourly`, `marts.agg_load_daily`, `marts.agg_generation_mix`, and `marts.agg_top_regions` with parameterized `WHERE` filters and per-day `rank <= limit` filtering for top regions
+- All metric responses now return the documented envelope with `data_as_of`, `pipeline_run_id`, and combined `freshness_status`
+
+### Tests Added/Passed
+- Passed: `uv run ruff check serving-fastapi tests/unit/serving_fastapi`
+- Passed: `uv run python -m compileall serving-fastapi/app tests/unit/serving_fastapi`
+- Passed: `cd serving-fastapi && uv run pytest ../tests/unit/serving_fastapi -q` (`15 passed`)
+- Passed: `cd serving-fastapi && uv run python -c "from app.main import app; print(sorted(route.path for route in app.routes if hasattr(route, 'path')))"` (verified metric routes are registered)
+
+### Known Issues
+- `Task 3.5+` remains intentionally unimplemented in this round; TTL caching, request logging middleware, and full BigQuery-backed runtime verification are still pending
+- `GET /metrics/load` validates `granularity` through the FastAPI/Pydantic enum surface and rejects unsupported values before repository execution
+
+## [2026-03-28 Round 31]
+
+### Completed
+- Completed `Task 3.1`, `Task 3.2`, and `Task 3.3` for the FastAPI serving layer scaffold, config/repository setup, and control-plane endpoints
+
+### Files Added/Modified
+- `serving-fastapi/pyproject.toml`
+- `serving-fastapi/Dockerfile`
+- `serving-fastapi/app/main.py`
+- `serving-fastapi/app/config/settings.py`
+- `serving-fastapi/app/config/bigquery.py`
+- `serving-fastapi/app/repositories/base.py`
+- `serving-fastapi/app/repositories/control_plane.py`
+- `serving-fastapi/app/services/control_plane.py`
+- `serving-fastapi/app/routers/health.py`
+- `serving-fastapi/app/routers/control_plane.py`
+- `serving-fastapi/app/schemas/common.py`
+- `serving-fastapi/app/schemas/health.py`
+- `serving-fastapi/app/schemas/control_plane.py`
+- `serving-fastapi/app/schemas/error.py`
+- `serving-fastapi/app/health/service.py`
+- `serving-fastapi/app/exceptions/base.py`
+- `serving-fastapi/app/exceptions/handlers.py`
+- `tests/unit/serving_fastapi/test_control_plane.py`
+- `tests/unit/serving_fastapi/test_settings.py`
+- `DOCS/TASKS.md`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- Added the standalone `serving-fastapi/` application scaffold defined in `SPEC.md`, including the canonical `app.main:app` entrypoint
+- Added environment-backed serving settings for `GCP_PROJECT_ID`, `BQ_DATASET_MARTS`, `BQ_DATASET_META`, `PORT`, and `GOOGLE_APPLICATION_CREDENTIALS`
+- Added read-only control-plane endpoints for `/health`, `/freshness`, `/pipeline/status`, and `/anomalies`
+- `/freshness` now derives the consumer-facing combined `freshness_status` from the worse of `pipeline_freshness_status` and `data_freshness_status`
+
+### Tests Added/Passed
+- Passed: `uv run python -m compileall serving-fastapi tests/unit/serving_fastapi`
+- Passed: `uv run ruff check serving-fastapi tests/unit/serving_fastapi`
+- Passed: `cd serving-fastapi && UV_CACHE_DIR=/tmp/uv-cache uv sync --dev`
+- Passed: `cd serving-fastapi && uv run pytest ../tests/unit/serving_fastapi -q` (`7 passed`)
+- Passed: `cd serving-fastapi && uv run python -c "from app.main import app; print(app.title)"`
+
+### Known Issues
+- `Task 3.4+` remains intentionally unimplemented in this round; metric endpoints, caching, request logging, and Docker/runtime verification against populated BigQuery tables are still pending
+- `GET /anomalies` currently returns the list of anomaly records directly; if a future response envelope is required, update `INTERFACES.md` and the endpoint schema together
+
 ## [2026-03-28 Round 30]
 
 ### Completed

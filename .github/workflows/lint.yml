@@ -22,11 +22,19 @@ jobs:
       - name: Sync project dependencies
         run: uv sync --all-groups --frozen
 
+      - name: Sync serving API dependencies
+        working-directory: serving-fastapi
+        run: uv sync --dev --frozen
+
       - name: Run Ruff
         run: uv run ruff check .
 
       - name: Run unit tests
         run: uv run pytest -q tests/unit/test_eia_grid_batch_tasks.py tests/unit/test_dbt_testing_contracts.py
+
+      - name: Run serving API unit tests
+        working-directory: serving-fastapi
+        run: uv run pytest -q ../tests/unit/serving_fastapi
 
       - name: Run SQLFluff
         run: uv run sqlfluff lint --config .sqlfluff.ci dbt/models
