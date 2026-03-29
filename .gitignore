@@ -168,7 +168,5 @@ dbt/dbt_packages/
 dbt/target/
 dbt/logs/
 
-DOCS/
 SPEC_zh.md
-AGENTS.md
 *.txt
