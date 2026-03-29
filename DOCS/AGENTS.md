@@ -11,7 +11,7 @@ Before writing any code, read these documents in this order:
 3. **`DOCS/TASKS.md`** — what to build, in what order, with acceptance criteria.
 4. **`DOCS/INTERFACES.md`** — table schemas, API contracts, GCS paths, config schema. Reference this when writing any code that reads/writes data.
 5. **`DOCS/TESTING.md`** — what to test, how, and what must pass before a milestone is done.
-6. **`CHANGELOG.md`** (if it exists) — what previous agents built, what changed, what is still unresolved. Read this before starting any work.
+6. **`DOCS/CHANGELOG.md`**  — what previous agents built, what changed, what is still unresolved. Read this before starting any work.
 
 ---
 

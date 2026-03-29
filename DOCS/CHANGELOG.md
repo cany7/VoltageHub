@@ -1,24 +1,3 @@
-## [2026-03-29 Round 39]
-
-### Completed
-- Added `serving-fastapi` to `docker-compose.yml` so the serving API can start alongside Airflow/Postgres using the shared `.env` file and the mounted service-account key
-
-### Files Added/Modified
-- `docker-compose.yml`
-- `CHANGELOG.md`
-
-### Interface or Behavior Changes
-- `docker compose up -d` can now bring up the FastAPI serving container on port `8090`
-- The serving container now reuses the existing `GOOGLE_APPLICATION_CREDENTIALS` env setting by mounting `./keys/service-account.json` into `/opt/airflow/keys/service-account.json`, matching the existing `.env` contract used by the Airflow containers
-
-### Tests Added/Passed
-- Passed: `docker compose up -d serving-fastapi`
-- Passed: in-container HTTP smoke check for `/health` (`200`)
-- Passed: in-container HTTP smoke check for `/pipeline/status` (`200`)
-
-### Known Issues
-- None identified yet for the compose wiring itself; follow-up smoke validation should confirm `/health` and `/pipeline/status`
-
 ## [2026-03-29 Round 38]
 
 ### Completed

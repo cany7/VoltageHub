@@ -37,4 +37,4 @@ jobs:
         run: uv run pytest -q ../tests/unit/serving_fastapi
 
       - name: Run SQLFluff
-        run: uv run sqlfluff lint --config .sqlfluff.ci dbt/models
+        run: uv run sqlfluff lint --config sqlfluff_libs/.sqlfluff.ci dbt/models

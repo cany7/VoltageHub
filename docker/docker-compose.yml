@@ -15,13 +15,13 @@ services:
 
   airflow-webserver:
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
     env_file:
-      - .env
+      - ../.env
     environment:
       AIRFLOW__CORE__EXECUTOR: ${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN:-postgresql+psycopg2://airflow:airflow@postgres:5432/airflow}
@@ -45,21 +45,21 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/schemas:/opt/airflow/schemas
-      - ./airflow/plugins:/opt/airflow/plugins
-      - ./dbt:/opt/airflow/dbt
-      - ./keys/service-account.json:/opt/airflow/keys/service-account.json:ro
+      - ../airflow/dags:/opt/airflow/dags
+      - ../airflow/schemas:/opt/airflow/schemas
+      - ../airflow/plugins:/opt/airflow/plugins
+      - ../dbt:/opt/airflow/dbt
+      - ../keys/service-account.json:/opt/airflow/keys/service-account.json:ro
 
   airflow-scheduler:
     build:
-      context: .
+      context: ..
       dockerfile: docker/Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
     env_file:
-      - .env
+      - ../.env
     environment:
       AIRFLOW__CORE__EXECUTOR: ${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN:-postgresql+psycopg2://airflow:airflow@postgres:5432/airflow}
@@ -73,25 +73,25 @@ services:
       exec airflow scheduler
       "
     volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/schemas:/opt/airflow/schemas
-      - ./airflow/plugins:/opt/airflow/plugins
-      - ./dbt:/opt/airflow/dbt
-      - ./keys/service-account.json:/opt/airflow/keys/service-account.json:ro
+      - ../airflow/dags:/opt/airflow/dags
+      - ../airflow/schemas:/opt/airflow/schemas
+      - ../airflow/plugins:/opt/airflow/plugins
+      - ../dbt:/opt/airflow/dbt
+      - ../keys/service-account.json:/opt/airflow/keys/service-account.json:ro
 
   serving-fastapi:
     build:
-      context: ./serving-fastapi
+      context: ../serving-fastapi
       dockerfile: Dockerfile
     env_file:
-      - .env
+      - ../.env
     environment:
       GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/opt/airflow/keys/service-account.json}
       PORT: ${PORT:-8090}
     ports:
       - "8090:8090"
     volumes:
-      - ./keys/service-account.json:/opt/airflow/keys/service-account.json:ro
+      - ../keys/service-account.json:/opt/airflow/keys/service-account.json:ro
 
 volumes:
   postgres-db-volume:

@@ -1,57 +1,44 @@
-# SETUP — VoltageHub
+# Setup Guide — VoltageHub
 
 ---
 
-## 1. Purpose
+## 1. Prerequisites
 
-This document explains how to configure, provision, run, and verify VoltageHub locally.
+Ensure the following tools and credentials are available before proceeding:
 
-The root `README.md` is intentionally optimized for project overview and portfolio presentation. This setup guide is the operational companion for reproducible local execution.
+| Requirement | Notes |
+|---|---|
+| GCP project | With billing enabled |
+| Service account JSON key | Must have GCS + BigQuery access |
+| EIA API key | Register at [EIA Open Data](https://www.eia.gov/opendata/) |
+| Docker + Docker Compose | v2 CLI (`docker compose`) |
+| Python 3.11 | Required for host-side linting and tests |
+| `uv` | Python package manager ([docs](https://docs.astral.sh/uv/)) |
+| Terraform 1.5+ | For GCP infrastructure provisioning |
 
----
+**Project defaults** (used throughout this guide):
 
-## 2. Prerequisites
-
-Before starting, make sure the following are available on your machine:
-
-- A GCP project
-- A service account JSON key with access to GCS and BigQuery
-- An EIA API key
-- Docker and Docker Compose
-- Python 3.11
-- `uv`
-- Terraform 1.5+
-
-Project baseline:
-
-- GCP project ID: `voltage-hub-dev`
-- Default region: `us-central1`
-- Default raw bucket name: `voltage-hub-raw`
+| Setting | Value |
+|---|---|
+| GCP project ID | `voltage-hub-dev` |
+| Region | `us-central1` |
+| Raw bucket | `voltage-hub-raw` |
 
 ---
 
-## 3. Repository Setup
+## 2. Configuration
 
-Clone the repository and move into the project root:
+### 2.1 Clone and Create `.env`
 
 ```bash
 git clone <your-repo-url>
 cd voltage-hub
-```
-
-Review the example environment file before creating your local config:
-
-```bash
 cp .env.example .env
 ```
 
----
+### 2.2 Environment Variables
 
-## 4. Environment Configuration
-
-Fill in `.env` using the values appropriate for your environment.
-
-The key variables are:
+Open `.env` and fill in the values for your environment:
 
 ```env
 # GCP
@@ -91,190 +78,101 @@ PORT=8090
 CACHE_TTL_SECONDS=300
 ```
 
-Notes:
+Key variables:
 
-- `PORT` is the serving API port. Do not rename it to `SERVER_PORT`.
-- `GCS_BUCKET_NAME` is the canonical raw bucket variable.
-- `SAMPLE_MODE=true` routes the pipeline to isolated sample datasets instead of the primary warehouse datasets.
+- **`PORT`** — Serving API port. Do not rename to `SERVER_PORT`.
+- **`GCS_BUCKET_NAME`** — The canonical raw landing bucket.
+- **`SAMPLE_MODE`** — Set to `true` to route all writes to isolated `*_sample` datasets (see [Appendix A](#appendix-a-sample-mode)).
 
----
+### 2.3 Service Account Key
 
-## 5. Credentials
+The runtime Service Account is created by Terraform in Section 3.1. **After completing Section 3.1**, manually perform the following:
 
-Place your service account key at:
+1. Download the JSON key for this Service Account from the GCP Console.
+2. Rename it to `service-account.json` and place it at:
+   ```
+   keys/service-account.json
+   ```
 
-```text
-keys/service-account.json
-```
-
-The project mounts that file into the containers at:
-
-```text
-/opt/airflow/keys/service-account.json
-```
-
-This means the following variables in `.env` should typically stay aligned:
-
-```env
-GCP_SERVICE_ACCOUNT_KEY_PATH=/opt/airflow/keys/service-account.json
-GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/keys/service-account.json
-```
-
-If infrastructure is ever reprovisioned from scratch, make sure the service account key is still present in `keys/service-account.json` before restarting Docker Compose.
+Docker Compose mounts it into containers at `/opt/airflow/keys/service-account.json`. The two credential variables in `.env` should point to this container path.
 
 ---
 
-## 6. Provision Infrastructure
+## 3. Deploy and Launch
 
-Initialize Terraform:
+All operations use `make`. The Makefile wraps `docker compose` commands so there is no need to call Docker directly.
+
+### 3.1 Provision Infrastructure (Terraform)
 
 ```bash
 make terraform-init
-```
-
-Apply the infrastructure:
-
-```bash
 make terraform-apply
 ```
 
-This provisions:
+This creates:
 
-- A GCS bucket for raw landing
+- A GCS bucket for raw data landing
 - BigQuery datasets: `raw`, `staging`, `marts`, `meta`
-- The runtime service account and required IAM bindings
+- The runtime service account with required IAM bindings
 
-If you prefer running Terraform directly:
-
-```bash
-terraform -chdir=terraform init
-terraform -chdir=terraform apply -var-file=terraform.tfvars
-```
-
-Verification targets:
-
-- The raw bucket exists in GCS
-- The four BigQuery datasets exist
-- Terraform finishes without errors
-
-Avoid destructive reprovision unless it is actually necessary. If you do need to recreate infrastructure, you may need to restore the service account key locally and restart Docker Compose so the containers remount it.
-
----
-
-## 7. Start Local Services
-
-Build and start the local stack:
+### 3.2 Start Services
 
 ```bash
 make build
 make up
 ```
 
-Or with Docker Compose directly:
+Four containers start:
 
-```bash
-docker compose build
-docker compose up -d
-```
+| Service | URL |
+|---|---|
+| Airflow UI | [http://localhost:8080](http://localhost:8080) |
+| FastAPI docs | [http://localhost:8090/docs](http://localhost:8090/docs) |
+| FastAPI health | [http://localhost:8090/health](http://localhost:8090/health) |
+| PostgreSQL | Internal (Airflow metadata DB) |
 
-This starts:
+Airflow default credentials: `admin` / `admin`.
 
-- `postgres`
-- `airflow-webserver`
-- `airflow-scheduler`
-- `serving-fastapi`
-
-Default local URLs:
-
-- Airflow UI: [http://localhost:8080](http://localhost:8080)
-- FastAPI docs: [http://localhost:8090/docs](http://localhost:8090/docs)
-- FastAPI health: [http://localhost:8090/health](http://localhost:8090/health)
-
-Airflow default local credentials from the container bootstrap:
-
-- Username: `admin`
-- Password: `admin`
-
-Quick container check:
-
-```bash
-docker compose ps
-```
-
----
-
-## 8. Prepare dbt
-
-Run `dbt deps` before any dbt command:
+### 3.3 Install dbt Dependencies
 
 ```bash
 make dbt-deps
 ```
 
-This installs the dbt package dependencies inside the Airflow container.
-
-You can then validate the warehouse project with:
-
-```bash
-make dbt-build BATCH_DATE=2026-03-27
-```
-
-Or generate docs with:
-
-```bash
-make dbt-docs
-```
-
-If you need to target sample mode manually, set `SAMPLE_MODE=true` in `.env` before running the DAG or dbt commands.
+Run this once before any dbt or pipeline operation. It installs dbt packages inside the Airflow container.
 
 ---
 
-## 9. Run the Pipeline
+## 4. Run the Pipeline
 
-The main DAG is:
+### 4.1 Trigger the DAG
 
-```text
-eia_grid_batch
-```
-
-You can trigger it from the Airflow UI, or run explicit backfill windows from the command line.
-
-Example backfill with the Makefile:
+The main DAG is `eia_grid_batch`. Trigger it from the Airflow UI, or run a backfill from the command line:
 
 ```bash
 make backfill START_DATE=2026-03-27T00:00:00+00:00 END_DATE=2026-03-28T00:00:00+00:00
 ```
 
-Equivalent Docker command:
+Each run executes the following stages in order:
 
-```bash
-docker compose exec airflow-webserver airflow dags backfill eia_grid_batch \
-  --start-date "2026-03-27T00:00:00+00:00" \
-  --end-date "2026-03-28T00:00:00+00:00"
 ```
-
-Each run performs the following sequence:
-
-```text
 extract_grid_batch
--> land_raw_to_gcs
--> load_to_bq_raw
--> dbt_source_freshness
--> dbt_build
--> check_anomalies
--> record_run_metrics
--> update_pipeline_state
+→ land_raw_to_gcs
+→ load_to_bq_raw
+→ dbt_source_freshness
+→ dbt_build
+→ check_anomalies
+→ record_run_metrics
+→ update_pipeline_state
 ```
 
-Airflow uses `catchup=True` and `max_active_runs=1`, so historical windows can be replayed sequentially without overlapping partition writes.
+The DAG uses `catchup=True` and `max_active_runs=1`, so backfilled windows are processed sequentially without partition conflicts.
 
----
+### 4.2 Serving API
 
-## 10. Start the Serving API
+The serving API (`serving-fastapi`) starts automatically with `make up`. No additional steps are needed for local use.
 
-The serving API is already included in `docker compose up -d`, so for most local runs you do not need to start it separately.
-
-If you want to run it outside Docker:
+To run it outside Docker:
 
 ```bash
 cd serving-fastapi
@@ -282,7 +180,7 @@ uv sync
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8090
 ```
 
-Useful local checks:
+Quick verification:
 
 ```bash
 curl http://localhost:8090/health
@@ -292,143 +190,178 @@ curl "http://localhost:8090/metrics/load?region=US48&start_date=2026-03-27&end_d
 
 ---
 
-## 11. Smoke Test
+## 5. Verify
 
-After the stack is up and at least one DAG run has completed, verify the system end to end.
+After at least one successful DAG run, confirm the following:
 
-### 11.1 Airflow
-
-- The `eia_grid_batch` DAG appears in the UI
-- A run completes without task failures
-- The graph view shows all tasks in the expected sequence
-
-### 11.2 GCS Raw Landing
-
-Check that raw files land under the documented path pattern:
-
-```text
-gs://<bucket>/voltage-hub/raw/year=YYYY/month=MM/day=DD/window=<start_iso>/batch.json
-```
-
-### 11.3 BigQuery
-
-Confirm that data exists in:
-
-- `raw.eia_grid_batch`
-- `staging.stg_grid_metrics`
-- `marts.agg_load_daily`
-- `marts.agg_generation_mix`
-- `meta.pipeline_state`
-- `meta.run_metrics`
-- `meta.freshness_log`
-
-### 11.4 Serving API
-
-Verify key endpoints:
-
-```bash
-curl http://localhost:8090/health
-curl http://localhost:8090/freshness
-curl http://localhost:8090/pipeline/status
-curl "http://localhost:8090/metrics/generation-mix?region=US48&start_date=2026-03-27&end_date=2026-03-27"
-```
+| Check | How |
+|---|---|
+| Terraform completed | `make terraform-apply` exited without errors |
+| Services running | `make up` then `docker compose -f docker/docker-compose.yml ps` — all containers healthy |
+| Airflow accessible | Open [http://localhost:8080](http://localhost:8080) |
+| dbt deps installed | `make dbt-deps` exited without errors |
+| DAG ran successfully | `eia_grid_batch` shows a completed run in the Airflow UI |
+| BigQuery populated | `raw`, `staging`, `marts`, `meta` datasets contain data |
+| `/health` | `curl http://localhost:8090/health` → `200` |
+| `/freshness` | Returns `pipeline_freshness_timestamp` and `data_freshness_timestamp` |
+| `/pipeline/status` | Returns latest successful window and `last_successful_run_id` |
+| Metrics endpoint | Returns precomputed analytical results |
 
 ---
 
-## 12. Sample Mode
+## 6. Testing
 
-Sample mode is intended for lightweight validation without writing to the primary warehouse datasets.
+### 6.1 Test Paths Overview
 
-To enable it, set:
+The project has six test paths, controlled by environment variables:
+
+| Path | Scope | When to Use | Connects to GCP? |
+|---|---|---|---|
+| **Unit Tests** | Extraction, loading, freshness, anomaly logic; Serving API routes and services | After every change | No |
+| **E2E Smoke** | Single-window pipeline run → GCS → BigQuery → dbt → marts → meta; UTC date-boundary scenario | After pipeline-related changes | Yes |
+| **E2E Heavy** | Idempotent rerun + multi-window backfill | Before milestone verification | Yes |
+| **E2E Failure-Path** | Freshness warn-path + error-path using isolated temporary datasets | When validating failure handling | Yes |
+| **Serving API Integration** | All FastAPI endpoints against real BigQuery data | After pipeline data is available | Yes |
+| **CI** | Ruff + SQLFluff + unit tests + dbt parse + Terraform validate | Automatic on push / PR | No |
+
+### 6.2 Unit Tests
+
+```bash
+uv run pytest tests/unit
+```
+
+Covers pipeline task logic (extraction, GCS path generation, BigQuery load config, retry behavior, freshness status, anomaly detection) and serving API unit tests (routes, services, validation). All mocked — no GCP access required.
+
+### 6.3 E2E Tests
+
+All three E2E paths live in `tests/integration/test_pipeline_e2e.py` and are controlled by environment variables.
+
+**Smoke** (default integration path):
+
+```bash
+set -a; source .env; set +a
+VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 .venv/bin/pytest -rs tests/integration/test_pipeline_e2e.py
+```
+
+Runs a single-window extraction through the entire pipeline, plus a UTC date-boundary scenario. Suitable for daily regression.
+
+**Heavy** (includes smoke):
+
+```bash
+set -a; source .env; set +a
+VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 \
+VOLTAGE_HUB_RUN_HEAVY_PIPELINE_TESTS=1 \
+  .venv/bin/pytest -rs tests/integration/test_pipeline_e2e.py
+```
+
+Adds idempotent rerun verification and multi-window backfill. Backfill defaults to 2 hourly windows. To adjust:
+
+```bash
+VOLTAGE_HUB_TEST_BACKFILL_HOURS=12    # Must be ≥ 2, integer
+VOLTAGE_HUB_TEST_BACKFILL_END_BOUNDARY=2026-03-27T00:00:00+00:00  # Must align to full hour
+```
+
+Heavy tests preserve data in GCS/BigQuery (no cleanup). This data is useful for continued development.
+
+**Failure-Path** (includes smoke):
+
+```bash
+set -a; source .env; set +a
+VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 \
+VOLTAGE_HUB_RUN_FAILURE_PATH_PIPELINE_TESTS=1 \
+  .venv/bin/pytest -rs tests/integration/test_pipeline_e2e.py
+```
+
+Creates isolated temporary BigQuery datasets, manipulates `_ingestion_timestamp` to trigger freshness warn and error paths, then automatically cleans up. Does not affect shared development data.
+
+**Running all E2E paths together:**
+
+```bash
+set -a; source .env; set +a
+VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 \
+VOLTAGE_HUB_RUN_HEAVY_PIPELINE_TESTS=1 \
+VOLTAGE_HUB_RUN_FAILURE_PATH_PIPELINE_TESTS=1 \
+  .venv/bin/pytest -rs tests/integration/test_pipeline_e2e.py
+```
+
+**Recommended order:**
+
+1. Daily development → unit tests + E2E smoke
+2. Milestone check → E2E heavy
+3. Failure handling validation → E2E failure-path (can run independently)
+
+### 6.4 Serving API Integration Tests
+
+```bash
+set -a; source .env; set +a
+VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 .venv/bin/pytest -rs tests/integration/test_serving_api.py
+```
+
+Requires populated BigQuery tables from a prior pipeline run. Tests all endpoints (`/health`, `/freshness`, `/pipeline/status`, `/anomalies`, `/metrics/*`) against real data, including response metadata validation and error handling.
+
+### 6.5 CI
+
+Three GitHub Actions workflows run automatically on push and PR:
+
+| Workflow | What It Checks |
+|---|---|
+| **Lint** | Ruff + SQLFluff + pipeline unit tests + serving API unit tests |
+| **dbt Parse** | `dbt deps` + `dbt parse --target ci` (offline, no GCP) |
+| **Terraform Validate** | `terraform fmt -check` + `terraform validate` |
+
+CI never connects to GCP. All checks are syntax and structural validation only.
+
+---
+
+## Appendix A: Sample Mode
+
+Sample mode routes all pipeline writes to isolated `*_sample` BigQuery datasets for lightweight validation without affecting the primary warehouse.
+
+Enable it in `.env`:
 
 ```env
 SAMPLE_MODE=true
 ```
 
-When sample mode is enabled:
+When enabled:
 
-- The DAG routes raw, staging, marts, and meta writes to the `*_sample` datasets
+- The DAG writes to `raw_sample`, `staging_sample`, `marts_sample`, `meta_sample` instead of the primary datasets
 - dbt uses the `sample` target
-- The scheduler-visible history is narrowed for lightweight validation
+- Scheduler-visible history is narrowed for quicker runs
 
-Sample mode still uses the same GCS bucket and raw object path convention. Isolation applies to BigQuery datasets and control-plane outputs rather than the landing bucket.
-
----
-
-## 13. Verification Checklist
-
-Use this checklist before considering the environment ready:
-
-- Terraform apply completed successfully
-- Docker Compose services are running
-- Airflow UI loads on `localhost:8080`
-- `dbt deps` completed successfully
-- The DAG ran successfully for at least one window
-- `raw`, `staging`, `marts`, and `meta` all contain data
-- `/health` returns `200`
-- `/freshness` returns both freshness signals
-- `/pipeline/status` returns the latest successful window
-- A metrics endpoint returns precomputed analytical results
+Sample mode still uses the same GCS bucket and raw landing path. Isolation applies to BigQuery datasets only.
 
 ---
 
-## 14. Troubleshooting
+## Appendix B: Troubleshooting
 
-### Credentials path errors
+**Credentials path errors**
+Confirm `keys/service-account.json` exists locally and `.env` points to `/opt/airflow/keys/service-account.json`. Check that the file is mounted: `docker compose -f docker/docker-compose.yml ps` should show healthy containers.
 
-If Airflow or FastAPI cannot authenticate to GCP, confirm:
+**IAM permission failures**
+The runtime service account needs: `bigquery.dataEditor`, `bigquery.jobUser`, `storage.objectAdmin`.
 
-- `keys/service-account.json` exists locally
-- `.env` points to `/opt/airflow/keys/service-account.json`
-- The file is mounted into the containers
+**dbt commands fail with missing packages**
+Run `make dbt-deps` before any dbt operation.
 
-### IAM permission issues
+**DAG missing in Airflow UI**
+Check container logs: `docker compose -f docker/docker-compose.yml logs airflow-webserver` and `docker compose -f docker/docker-compose.yml logs airflow-scheduler`. Confirm `airflow/dags/` is mounted correctly.
 
-If GCS uploads or BigQuery jobs fail, check that the runtime service account has the required roles:
+**BigQuery datasets missing**
+Re-run `make terraform-apply` and confirm the datasets exist in the GCP console.
 
-- `bigquery.dataEditor`
-- `bigquery.jobUser`
-- `storage.objectAdmin`
+**API returns empty data**
+Ensure at least one DAG run completed successfully and that the queried date range matches data present in the marts tables.
 
-### `dbt deps` not run
-
-If dbt commands fail because packages are missing, run:
-
-```bash
-make dbt-deps
-```
-
-### DAG missing in Airflow
-
-If `eia_grid_batch` does not appear in the Airflow UI:
-
-- Confirm the containers are running
-- Check `docker compose logs airflow-webserver`
-- Check `docker compose logs airflow-scheduler`
-- Confirm `airflow/dags/` is mounted correctly
-
-### BigQuery datasets missing
-
-If pipeline tasks fail because datasets do not exist, rerun Terraform apply and confirm the expected datasets are present.
-
-### API returns empty data
-
-If `/health` works but metrics endpoints return empty results:
-
-- Confirm the DAG has completed successfully
-- Confirm marts tables contain rows for the requested dates
-- Confirm you are querying dates that actually exist in the warehouse
-
-### Sample mode confusion
-
-If results seem to be missing while `SAMPLE_MODE=true` is enabled, make sure you are checking the `*_sample` datasets rather than the primary datasets.
+**Sample mode confusion**
+When `SAMPLE_MODE=true`, all reads and writes go to `*_sample` datasets. Check the sample datasets, not the primary ones.
 
 ---
 
-## 15. Related Documents
+## Related Documents
 
-- `DOCS/SPEC.md`
-- `DOCS/ARCHITECTURE.md`
-- `DOCS/INTERFACES.md`
-- `DOCS/TESTING.md`
-- `CHANGELOG.md`
+- [SPEC.md](SPEC.md)
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [INTERFACES.md](INTERFACES.md)
+- [TESTING.md](TESTING.md)
+- [CHANGELOG.md](CHANGELOG.md)
