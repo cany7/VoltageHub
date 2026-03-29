@@ -1,3 +1,99 @@
+## [2026-03-28 Round 27]
+
+### Completed
+- Started the early `Task 4.1` CI setup for the already accepted Phase 1 / 2 ELT scope
+- Added GitHub Actions workflows for linting, dbt compile, and Terraform validation without any real GCP execution path
+- Tightened SQLFluff CI templating to use the `ci` dbt target and cleared a repo-wide Ruff failure so `ruff check .` can pass in CI
+
+### Files Added/Modified
+- `.github/workflows/lint.yml`
+- `.github/workflows/dbt_compile.yml`
+- `.github/workflows/terraform_validate.yml`
+- `.sqlfluff`
+- `tests/integration/test_pipeline_e2e.py`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No API, warehouse-schema, DAG-sequence, or real-environment behavior changes
+- GitHub Actions CI is now explicitly non-GCP and limited to syntax, lint, compile, and unit/static validation for the completed ELT phases
+- Task `4.1` remains in progress overall because Phase 3 serving-layer tests are expected to extend CI later
+- SQLFluff dbt templating now targets `ci` by default so linting does not depend on the real `dev` BigQuery profile
+
+### Tests Added/Passed
+- Passed: `uv run ruff check .`
+- Passed: `uv run pytest -q tests/unit/test_eia_grid_batch_tasks.py tests/unit/test_dbt_testing_contracts.py` (`18 passed`)
+- Passed: `terraform -chdir=terraform fmt -check -recursive`
+- Not run locally in this round: `sqlfluff lint`, `dbt deps && dbt compile --target ci`, `terraform init -backend=false`, `terraform validate` because the current request explicitly avoids real-environment paths and the local sandbox blocks external registry/package downloads
+
+### Known Issues
+- Final confirmation for the `sqlfluff` / `dbt compile` / `terraform validate` workflow steps is deferred to GitHub Actions or a later local run with external package-registry access
+
+## [2026-03-28 Round 26]
+
+### Completed
+- Executed the full heavy integration suite against real Airflow, BigQuery, GCS, and EIA resources with a `12`-window backfill
+- Confirmed that the previously corrected heavy idempotent-rerun and heavy backfill validations both pass when run together as the full heavy suite
+- Closed the remaining Phase 2 ELT validation gap for smoke + heavy + isolated failure-path coverage
+
+### Files Added/Modified
+- `CHANGELOG.md`
+- `TEST_RUN_GUIDE.txt`
+
+### Interface or Behavior Changes
+- No runtime pipeline interface changes
+- No testing contract changes; this round records successful execution of the existing heavy acceptance flow
+
+### Tests Added/Passed
+- Passed: `set -a; source .env; set +a; VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 VOLTAGE_HUB_RUN_HEAVY_PIPELINE_TESTS=1 VOLTAGE_HUB_TEST_BACKFILL_HOURS=12 .venv/bin/pytest -rs tests/integration/test_pipeline_e2e.py` (`5 passed, 2 skipped`)
+
+### Known Issues
+- `meta.run_metrics`, `meta.freshness_log`, and `meta.anomaly_results` remain append-only by design, so repeated acceptance runs accumulate historical records; serving queries must continue to select latest rows or filter by time/window as documented
+
+## [2026-03-28 Round 25]
+
+### Completed
+- Corrected the heavy backfill integration test so its expected `run_metrics` windows match Airflow backfill logical-date semantics
+- Added configurable heavy-test backfill end-boundary support and verified the backfill case against a real 2-window run
+
+### Files Added/Modified
+- `tests/integration/test_pipeline_e2e.py`
+- `DOCS/TESTING.md`
+- `DOCS/INTERFACES.md`
+- `TEST_RUN_GUIDE.txt`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No runtime pipeline interface changes
+- Heavy backfill integration now treats `window_start` as the Airflow backfill logical date, filters for newly created `backfill__*` `run_metrics` rows, and defaults to validating the windows immediately preceding `VOLTAGE_HUB_TEST_BACKFILL_END_BOUNDARY`
+
+### Tests Added/Passed
+- Passed: `uv run ruff check tests/integration/test_pipeline_e2e.py`
+- Passed: `set -a; source .env; set +a; VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 VOLTAGE_HUB_RUN_HEAVY_PIPELINE_TESTS=1 .venv/bin/pytest -rs tests/integration/test_pipeline_e2e.py -k backfill -vv` (`1 passed, 6 deselected`)
+
+### Known Issues
+- The full heavy suite has not yet been re-run as a single command after both fixes; idempotent and backfill have been validated separately
+
+## [2026-03-28 Round 24]
+
+### Completed
+- Corrected the heavy idempotent rerun integration test so it establishes its own baseline with the target execution window before comparing the second rerun snapshot
+- Confirmed that the first heavy failure was caused by prior smoke coverage mutating the same `observation_date` partition, not by a same-window rerun regression
+
+### Files Added/Modified
+- `tests/integration/test_pipeline_e2e.py`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No runtime pipeline interface changes
+- Heavy idempotent validation now compares two consecutive runs of the same execution window instead of comparing against a snapshot that may already have been altered by earlier smoke scenarios touching overlapping dates
+
+### Tests Added/Passed
+- Passed: `uv run ruff check tests/integration/test_pipeline_e2e.py`
+- Passed: `set -a; source .env; set +a; VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 VOLTAGE_HUB_RUN_HEAVY_PIPELINE_TESTS=1 .venv/bin/pytest -rs tests/integration/test_pipeline_e2e.py -k idempotent -vv` (`1 passed, 6 deselected`)
+
+### Known Issues
+- Heavy backfill validation still fails because `meta.run_metrics` is missing at least one expected backfilled window row; this remains the next issue to debug
+
 ## [2026-03-28 Round 23]
 
 ### Completed

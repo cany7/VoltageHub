@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -523,6 +522,11 @@ def test_idempotent_rerun_preserves_data_plane_outputs(
             "Set VOLTAGE_HUB_RUN_HEAVY_PIPELINE_TESTS=1 to run idempotent rerun validation."
         )
 
+    # Assumption: establish the baseline with the same execution date under test so
+    # earlier smoke scenarios that touched overlapping observation_date partitions
+    # do not distort the idempotency comparison.
+    _run_airflow_dag_test(pipeline_run_context["airflow_execution_date"])
+
     affected_dates = pipeline_run_context["affected_dates"]
     before_snapshot = _build_data_plane_snapshot(
         client=bigquery_client,
@@ -550,7 +554,6 @@ def test_backfill_windows_populate_outputs_for_each_window(
     bigquery_client: bigquery.Client,
     project_id: str,
     datasets: dict[str, str],
-    airflow_execution_date: datetime,
 ) -> None:
     if not os.environ.get("VOLTAGE_HUB_RUN_HEAVY_PIPELINE_TESTS"):
         pytest.skip(
@@ -558,16 +561,21 @@ def test_backfill_windows_populate_outputs_for_each_window(
         )
 
     backfill_hours = _resolve_backfill_hours()
-    backfill_start = airflow_execution_date - timedelta(hours=backfill_hours - 1)
-    backfill_end = airflow_execution_date
+    backfill_end = _resolve_backfill_end_boundary()
+    expected_window_starts = [
+        backfill_end - timedelta(hours=offset)
+        for offset in range(backfill_hours, 0, -1)
+    ]
+    backfill_start = expected_window_starts[0]
+    backfill_started_at = datetime.now(tz=UTC)
     _run_airflow_backfill(backfill_start, backfill_end)
 
-    expected_window_ends = _hourly_execution_dates(backfill_start, backfill_end)
-    expected_batch_dates = {
-        (window_end - timedelta(hours=1)).date().isoformat()
-        for window_end in expected_window_ends
-    }
-    assert len(expected_window_ends) == backfill_hours
+    expected_batch_dates = {window_start.date().isoformat() for window_start in expected_window_starts}
+    expected_windows = [
+        (window_start, window_start + timedelta(hours=1))
+        for window_start in expected_window_starts
+    ]
+    assert len(expected_windows) == backfill_hours
 
     for batch_date in sorted(expected_batch_dates):
         raw_count = _scalar_query(
@@ -581,16 +589,23 @@ def test_backfill_windows_populate_outputs_for_each_window(
         )
         assert raw_count > 0
 
-    for window_end in expected_window_ends:
-        window_start = window_end - timedelta(hours=1)
+    for window_start, window_end in expected_windows:
         run_metrics_count = _scalar_query(
             bigquery_client,
             f"""
             select count(*) as row_count
             from `{project_id}.{datasets["meta"]}.run_metrics`
-            where window_start = @window_start and window_end = @window_end
+            where run_id like 'backfill__%%'
+              and created_at >= @backfill_started_at
+              and window_start = @window_start
+              and window_end = @window_end
             """,
             [
+                bigquery.ScalarQueryParameter(
+                    "backfill_started_at",
+                    "TIMESTAMP",
+                    backfill_started_at,
+                ),
                 bigquery.ScalarQueryParameter("window_start", "TIMESTAMP", window_start),
                 bigquery.ScalarQueryParameter("window_end", "TIMESTAMP", window_end),
             ],
@@ -816,6 +831,17 @@ def _resolve_backfill_hours() -> int:
     if hours < 2:
         raise ValueError("VOLTAGE_HUB_TEST_BACKFILL_HOURS must be at least 2")
     return hours
+
+
+def _resolve_backfill_end_boundary() -> datetime:
+    raw_value = os.environ.get(
+        "VOLTAGE_HUB_TEST_BACKFILL_END_BOUNDARY",
+        "2026-03-27T00:00:00+00:00",
+    )
+    value = _coerce_datetime(raw_value)
+    if value.minute != 0 or value.second != 0 or value.microsecond != 0:
+        raise ValueError("VOLTAGE_HUB_TEST_BACKFILL_END_BOUNDARY must align to an hour")
+    return value
 
 
 def _hourly_execution_dates(start: datetime, end: datetime) -> list[datetime]:

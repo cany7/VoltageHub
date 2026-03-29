@@ -1,0 +1,36 @@
+name: Terraform Validate
+
+on:
+  push:
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform_validate.yml"
+  pull_request:
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform_validate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: "1.5.7"
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive
+
+      - name: Initialize without backend
+        run: terraform init -backend=false
+
+      - name: Validate configuration
+        run: terraform validate

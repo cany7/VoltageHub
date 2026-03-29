@@ -1,0 +1,42 @@
+name: dbt Compile
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    env:
+      GCP_PROJECT_ID: ci-placeholder
+      GCP_REGION: us-central1
+      GCP_SERVICE_ACCOUNT_KEY_PATH: /tmp/ci-service-account.json
+      GOOGLE_APPLICATION_CREDENTIALS: /tmp/ci-service-account.json
+      BQ_DATASET_RAW: raw
+      BQ_DATASET_STAGING: staging
+      BQ_DATASET_MARTS: marts
+      BQ_DATASET_META: meta
+      UV_CACHE_DIR: /tmp/uv-cache
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Create placeholder service-account file
+        run: printf '{}' > "$GCP_SERVICE_ACCOUNT_KEY_PATH"
+
+      - name: Install dbt tooling
+        run: uv sync --all-groups --frozen
+
+      - name: Install dbt packages
+        run: uv run --with 'dbt-core==1.8.*' --with 'dbt-bigquery==1.8.*' dbt deps --project-dir dbt --profiles-dir dbt
+
+      - name: Compile dbt project
+        run: uv run --with 'dbt-core==1.8.*' --with 'dbt-bigquery==1.8.*' dbt compile --target ci --project-dir dbt --profiles-dir dbt
