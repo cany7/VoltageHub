@@ -320,6 +320,48 @@ def test_load_to_bq_raw_uses_expected_load_configuration(raw_payload):
     ]
 
 
+def test_sample_mode_helpers_switch_targets_and_dataset_names(monkeypatch):
+    monkeypatch.setenv("SAMPLE_MODE", "true")
+    monkeypatch.setenv("BQ_DATASET_RAW_SAMPLE", "raw_validation")
+    monkeypatch.setenv("BQ_DATASET_STAGING_SAMPLE", "staging_validation")
+    monkeypatch.setenv("BQ_DATASET_MARTS_SAMPLE", "marts_validation")
+    monkeypatch.setenv("BQ_DATASET_META_SAMPLE", "meta_validation")
+
+    assert tasks.sample_mode_enabled() is True
+    assert tasks.resolve_dbt_target() == "sample"
+    assert tasks._dataset_name("raw") == "raw_validation"
+    assert tasks._dataset_name("staging") == "staging_validation"
+    assert tasks._dataset_name("marts") == "marts_validation"
+    assert tasks._dataset_name("meta") == "meta_validation"
+
+
+def test_load_to_bq_raw_defaults_to_sample_dataset_when_enabled(monkeypatch, raw_payload):
+    captured = {}
+
+    class FakeLoadJob:
+        def result(self):
+            return SimpleNamespace(job_id="job-sample", output_rows=2)
+
+    class FakeBigQueryClient:
+        def load_table_from_uri(self, gcs_uri, destination_table, job_config):
+            captured["destination_table"] = destination_table
+            captured["job_config"] = job_config
+            return FakeLoadJob()
+
+    monkeypatch.setenv("SAMPLE_MODE", "true")
+    monkeypatch.setenv("GCP_PROJECT_ID", "voltage-hub-dev")
+    monkeypatch.setenv("BQ_DATASET_RAW_SAMPLE", "raw_sample_validation")
+
+    result = tasks.load_to_bq_raw(
+        "gs://voltage-hub-raw/voltage-hub/raw/year=2026/month=03/day=27/window=2026-03-27T00:00:00+00:00/batch.json",
+        raw_payload,
+        bq_client=FakeBigQueryClient(),
+    )
+
+    assert result["destination_table"] == "voltage-hub-dev.raw_sample_validation.eia_grid_batch$20260327"
+    assert captured["destination_table"] == "voltage-hub-dev.raw_sample_validation.eia_grid_batch$20260327"
+
+
 @pytest.mark.parametrize(
     ("timestamp_value", "expected_status"),
     [
@@ -369,6 +411,55 @@ def test_build_freshness_row_records_both_freshness_signals(monkeypatch):
         "data_freshness_status": "stale",
         "checked_at": "2026-03-27T11:00:00+00:00",
     }
+
+
+def test_build_freshness_row_uses_sample_tables_when_enabled(monkeypatch):
+    captured = {}
+    checked_at = datetime(2026, 3, 27, 11, 0, tzinfo=UTC)
+
+    monkeypatch.setenv("SAMPLE_MODE", "true")
+    monkeypatch.setenv("GCP_PROJECT_ID", "voltage-hub-dev")
+    monkeypatch.setenv("BQ_DATASET_RAW_SAMPLE", "raw_sample_validation")
+    monkeypatch.setenv("BQ_DATASET_STAGING_SAMPLE", "staging_sample_validation")
+
+    class FakeBigQueryClient:
+        def query(self, query):
+            captured["query"] = query
+            return SimpleNamespace(result=lambda: iter([]))
+
+    tasks._build_freshness_row(
+        client=FakeBigQueryClient(),
+        run_id="manual__2026-03-27T11:00:00+00:00",
+        checked_at=checked_at,
+    )
+
+    assert "voltage-hub-dev.raw_sample_validation.eia_grid_batch" in captured["query"]
+    assert "voltage-hub-dev.staging_sample_validation.stg_grid_metrics" in captured["query"]
+
+
+def test_build_anomaly_rows_uses_join_based_rolling_history_query(monkeypatch):
+    captured = {}
+
+    monkeypatch.setenv("GCP_PROJECT_ID", "voltage-hub-dev")
+
+    class FakeBigQueryClient:
+        def query(self, query, job_config):
+            captured["query"] = query
+            captured["job_config"] = job_config
+            return SimpleNamespace(result=lambda: iter([]))
+
+    result = tasks._build_anomaly_rows(
+        client=FakeBigQueryClient(),
+        affected_dates=["2026-03-29"],
+        run_id="manual__2026-03-29T04:00:00+00:00",
+        checked_at=datetime(2026, 3, 29, 5, 0, tzinfo=UTC),
+    )
+
+    assert result == []
+    assert "rolling_history as (" in captured["query"]
+    assert "left join daily_metrics as history_day" in captured["query"]
+    assert "left join rolling_history as history" in captured["query"]
+    assert "select avg(history_day.current_value)" not in captured["query"]
 
 
 def test_check_anomalies_is_warning_only_when_internal_query_fails(monkeypatch):

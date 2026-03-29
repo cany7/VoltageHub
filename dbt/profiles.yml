@@ -21,3 +21,13 @@ voltage_hub:
       threads: 1
       timeout_seconds: 300
       priority: interactive
+    sample:
+      type: bigquery
+      method: service-account
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: "{{ env_var('BQ_DATASET_STAGING_SAMPLE', 'staging_sample') }}"
+      keyfile: "{{ env_var('GCP_SERVICE_ACCOUNT_KEY_PATH') }}"
+      location: "{{ env_var('GCP_REGION', 'us-central1') }}"
+      threads: 1
+      timeout_seconds: 300
+      priority: interactive

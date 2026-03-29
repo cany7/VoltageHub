@@ -21,6 +21,7 @@ SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "raw_eia_batch.j
 PIPELINE_NAME = "eia_grid_batch"
 DEFAULT_FRESHNESS_THRESHOLD_HOURS = 6
 WARNING_ONLY_ANOMALY_THRESHOLD_PCT = 50.0
+SAMPLE_MODE_ENV_VAR = "SAMPLE_MODE"
 LOGGER = logging.getLogger(__name__)
 
 
@@ -48,6 +49,15 @@ class BatchWindow:
     @property
     def batch_id(self) -> str:
         return f"{self.start.strftime('%Y%m%dT%H%M%S')}_{self.end.strftime('%Y%m%dT%H%M%S')}"
+
+
+def sample_mode_enabled() -> bool:
+    value = os.environ.get(SAMPLE_MODE_ENV_VAR, "false").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def resolve_dbt_target() -> str:
+    return "sample" if sample_mode_enabled() else "dev"
 
 
 def extract_grid_batch(
@@ -144,7 +154,7 @@ def load_to_bq_raw(
     """Load the raw batch from GCS into the partitioned raw table."""
 
     resolved_project_id = project_id or os.environ.get("GCP_PROJECT_ID")
-    resolved_dataset_name = dataset_name or os.environ.get("BQ_DATASET_RAW", "raw")
+    resolved_dataset_name = dataset_name or _dataset_name("raw")
     if not resolved_project_id:
         raise RawLoadError("GCP_PROJECT_ID is required for raw BigQuery loads")
 
@@ -649,12 +659,18 @@ def _build_bigquery_client() -> bigquery.Client:
 
 def _dataset_name(dataset_key: str) -> str:
     mapping = {
-        "raw": os.environ.get("BQ_DATASET_RAW", "raw"),
-        "staging": os.environ.get("BQ_DATASET_STAGING", "staging"),
-        "marts": os.environ.get("BQ_DATASET_MARTS", "marts"),
-        "meta": os.environ.get("BQ_DATASET_META", "meta"),
+        "raw": _dataset_env_value("BQ_DATASET_RAW", "raw"),
+        "staging": _dataset_env_value("BQ_DATASET_STAGING", "staging"),
+        "marts": _dataset_env_value("BQ_DATASET_MARTS", "marts"),
+        "meta": _dataset_env_value("BQ_DATASET_META", "meta"),
     }
     return mapping[dataset_key]
+
+
+def _dataset_env_value(base_env_var: str, default: str) -> str:
+    if sample_mode_enabled():
+        return os.environ.get(f"{base_env_var}_SAMPLE", f"{default}_sample")
+    return os.environ.get(base_env_var, default)
 
 
 def _table_id(dataset_key: str, table_name: str) -> str:
@@ -815,21 +831,35 @@ def _build_anomaly_rows(
             from `{_table_id('marts', 'agg_generation_mix')}`
             group by observation_date, region
         ),
+        rolling_history as (
+            select
+                current_day.observation_date,
+                current_day.region,
+                current_day.metric_name,
+                avg(history_day.current_value) as rolling_7d_avg
+            from daily_metrics as current_day
+            left join daily_metrics as history_day
+                on history_day.region = current_day.region
+                and history_day.metric_name = current_day.metric_name
+                and history_day.observation_date between date_sub(current_day.observation_date, interval 7 day)
+                    and date_sub(current_day.observation_date, interval 1 day)
+            group by
+                current_day.observation_date,
+                current_day.region,
+                current_day.metric_name
+        ),
         scored_metrics as (
             select
                 current_day.observation_date,
                 current_day.region,
                 current_day.metric_name,
                 current_day.current_value,
-                (
-                    select avg(history_day.current_value)
-                    from daily_metrics as history_day
-                    where history_day.region = current_day.region
-                        and history_day.metric_name = current_day.metric_name
-                        and history_day.observation_date between date_sub(current_day.observation_date, interval 7 day)
-                            and date_sub(current_day.observation_date, interval 1 day)
-                ) as rolling_7d_avg
+                history.rolling_7d_avg
             from daily_metrics as current_day
+            left join rolling_history as history
+                on history.observation_date = current_day.observation_date
+                and history.region = current_day.region
+                and history.metric_name = current_day.metric_name
         )
         select
             observation_date,

@@ -14,6 +14,6 @@ models:
       relation: true
       columns: true
     staging:
-      +schema: "{{ env_var('BQ_DATASET_STAGING', 'staging') }}"
+      +schema: "{{ env_var('BQ_DATASET_STAGING_SAMPLE', 'staging_sample') if target.name == 'sample' else env_var('BQ_DATASET_STAGING', 'staging') }}"
     marts:
-      +schema: "{{ env_var('BQ_DATASET_MARTS', 'marts') }}"
+      +schema: "{{ env_var('BQ_DATASET_MARTS_SAMPLE', 'marts_sample') if target.name == 'sample' else env_var('BQ_DATASET_MARTS', 'marts') }}"

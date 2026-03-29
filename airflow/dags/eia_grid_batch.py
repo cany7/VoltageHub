@@ -16,6 +16,8 @@ from eia_grid_batch_tasks import (
     land_raw_to_gcs,
     load_to_bq_raw,
     record_run_metrics,
+    resolve_dbt_target,
+    sample_mode_enabled,
     update_pipeline_state,
 )
 
@@ -30,12 +32,21 @@ def _resolve_schedule() -> str:
 
 
 def _resolve_start_date() -> pendulum.DateTime:
+    if sample_mode_enabled():
+        # Assumption: sample mode exists for minimal validation, so it intentionally
+        # limits the scheduler-visible history to the latest single window.
+        return pendulum.now("UTC").subtract(hours=1).start_of("hour")
+
     configured_start_date = Variable.get("pipeline_start_date", default_var=None)
     if configured_start_date:
         return pendulum.parse(configured_start_date).in_timezone("UTC")
 
     backfill_days = int(os.environ.get("BACKFILL_DAYS", "7"))
     return pendulum.now("UTC").subtract(days=backfill_days).start_of("hour")
+
+
+def _dbt_target() -> str:
+    return resolve_dbt_target()
 
 
 with DAG(
@@ -86,7 +97,7 @@ with DAG(
         bash_command=(
             "dbt deps --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt "
             "&& dbt source freshness --project-dir /opt/airflow/dbt "
-            "--profiles-dir /opt/airflow/dbt --target dev"
+            f"--profiles-dir /opt/airflow/dbt --target {_dbt_target()}"
         ),
         execution_timeout=timedelta(minutes=5),
     )
@@ -96,7 +107,7 @@ with DAG(
         bash_command=(
             "dbt deps --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt "
             "&& dbt build --project-dir /opt/airflow/dbt --profiles-dir /opt/airflow/dbt "
-            "--target dev --vars '{\"batch_date\": \"{{ data_interval_start | ds }}\"}'"
+            f"--target {_dbt_target()} --vars '{{\"batch_date\": \"{{{{ data_interval_start | ds }}}}\"}}'"
         ),
         execution_timeout=timedelta(minutes=30),
     )

@@ -26,3 +26,6 @@ markers = [
     "integration_heavy: marks the slower rerun/backfill pipeline tests that are opt-in by environment variable",
     "integration_failure: marks targeted freshness/failure-path pipeline checks that intentionally create stale or failing conditions and are opt-in by environment variable",
 ]
+
+[tool.ruff]
+target-version = "py311"

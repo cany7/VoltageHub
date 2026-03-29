@@ -1,3 +1,84 @@
+## [2026-03-29 Round 38]
+
+### Completed
+- Fixed the `check_anomalies` BigQuery query so the rolling seven-day baseline uses join-based aggregation instead of a correlated subquery rejected by BigQuery
+- Re-ran only the anomaly-related validation on the existing sample-mode data without re-pulling raw source data
+
+### Files Added/Modified
+- `airflow/dags/eia_grid_batch_tasks.py`
+- `tests/unit/test_eia_grid_batch_tasks.py`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No API, table-schema, or DAG-sequence changes
+- `check_anomalies` now computes the rolling seven-day baseline through a self-join / grouped history CTE, which keeps anomaly detection warning-only while avoiding the prior invalid BigQuery query shape
+
+### Tests Added/Passed
+- Passed: `uv run ruff check airflow/dags/eia_grid_batch_tasks.py tests/unit/test_eia_grid_batch_tasks.py`
+- Passed: `uv run pytest -q tests/unit/test_eia_grid_batch_tasks.py` (`19 passed`)
+- Passed: `docker compose exec ... airflow tasks test eia_grid_batch check_anomalies 2026-03-29T04:00:00+00:00` with `SAMPLE_MODE=true` (`rows_inserted = 65`)
+- Passed: direct BigQuery verification against `meta_sample.anomaly_results` for `run_id = manual__2026-03-29T04:00:00+00:00` (`65` rows)
+
+### Known Issues
+- No new blocking issues identified in this anomaly-fix round
+- The sample-mode datasets created for isolated validation (`raw_sample`, `staging_sample`, `marts_sample`, `meta_sample`) remain in BigQuery for future non-production testing
+
+## [2026-03-28 Round 37]
+
+### Completed
+- Completed `Task 4.3` by adding `SAMPLE_MODE=true` routing for isolated sample BigQuery datasets plus `dbt --target sample`
+- Synchronized `Task 4.2` and `Task 4.4` status with the repository state for generated dbt docs, schema descriptions, SQLFluff configuration, Ruff configuration, and the local lint target
+
+### Files Added/Modified
+- `.env.example`
+- `airflow/dags/eia_grid_batch.py`
+- `airflow/dags/eia_grid_batch_tasks.py`
+- `dbt/profiles.yml`
+- `dbt/dbt_project.yml`
+- `dbt/models/sources.yml`
+- `dbt/models/meta/schema.yml`
+- `pyproject.toml`
+- `tests/unit/test_eia_grid_batch_tasks.py`
+- `tests/unit/test_dbt_testing_contracts.py`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- Added `SAMPLE_MODE` plus `BQ_DATASET_RAW_SAMPLE`, `BQ_DATASET_STAGING_SAMPLE`, `BQ_DATASET_MARTS_SAMPLE`, and `BQ_DATASET_META_SAMPLE` environment variables
+- Sample mode now writes raw, staging, marts, and meta data to isolated sample BigQuery datasets while continuing to reuse the existing GCS bucket/path convention
+- The Airflow DAG now routes `dbt source freshness` and `dbt build` to the `sample` dbt target when sample mode is enabled and limits the scheduler-visible history to the latest single window in that mode
+- No serving API contract changes; serving continues to read only the primary marts/meta datasets
+
+### Tests Added/Passed
+- Passed: `uv run ruff check .`
+- Passed: `uv run pytest -q tests/unit/test_eia_grid_batch_tasks.py tests/unit/test_dbt_testing_contracts.py` (`23 passed`)
+- Passed: `uv run --with 'dbt-core==1.8.*' --with 'dbt-bigquery==1.8.*' dbt parse --target dev --no-populate-cache --project-dir dbt --profiles-dir dbt` (with temporary placeholder credentials)
+- Passed: `uv run --with 'dbt-core==1.8.*' --with 'dbt-bigquery==1.8.*' dbt parse --target sample --no-populate-cache --project-dir dbt --profiles-dir dbt` (with temporary placeholder credentials)
+
+### Known Issues
+- `README.md` and the README-backed documentation tasks remain intentionally incomplete in this round
+- Sample mode reuses the existing GCS bucket and raw object path convention by design; isolation applies to BigQuery and control-plane datasets rather than the landing bucket
+
+## [2026-03-28 Round 36]
+
+### Completed
+- Closed `Task 3.7` after confirming the repository already contains Phase 3 serving verification coverage and recorded successful real-resource validation for the current serving implementation
+
+### Files Added/Modified
+- `DOCS/TASKS.md`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No serving API runtime changes in this round
+- `Task 3.7` is now marked complete based on the existing serving integration suite in `tests/integration/test_serving_api.py`, the unit coverage in `tests/unit/serving_fastapi/`, and the previously recorded successful Phase 3 verification results already captured in `CHANGELOG.md`
+
+### Tests Added/Passed
+- No new tests were added in this round
+- Existing repository coverage already includes serving integration checks for `/health`, `/freshness`, `/pipeline/status`, `/anomalies`, `/metrics/load`, `/metrics/generation-mix`, and `/metrics/top-regions`, plus prior recorded successful real-resource validation
+
+### Known Issues
+- No new Phase 3 issues identified in this closeout round
+- Future work now starts at `Task 4.2+`
+
 ## [2026-03-28 Round 35]
 
 ### Completed

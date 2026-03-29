@@ -3,7 +3,7 @@ version: 2
 sources:
   - name: meta
     database: "{{ env_var('GCP_PROJECT_ID') }}"
-    schema: "{{ env_var('BQ_DATASET_META', 'meta') }}"
+    schema: "{{ env_var('BQ_DATASET_META_SAMPLE', 'meta_sample') if target.name == 'sample' else env_var('BQ_DATASET_META', 'meta') }}"
     description: Control-plane tables created and populated by Airflow tasks rather than dbt models.
     tables:
       - name: pipeline_state

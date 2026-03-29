@@ -3,7 +3,7 @@ version: 2
 sources:
   - name: raw
     database: "{{ env_var('GCP_PROJECT_ID') }}"
-    schema: "{{ env_var('BQ_DATASET_RAW', 'raw') }}"
+    schema: "{{ env_var('BQ_DATASET_RAW_SAMPLE', 'raw_sample') if target.name == 'sample' else env_var('BQ_DATASET_RAW', 'raw') }}"
     tables:
       - name: eia_grid_batch
         description: Raw EIA grid batch rows landed by the Airflow extraction tasks.

@@ -52,3 +52,33 @@ def test_source_freshness_contract_declares_warn_and_error_thresholds() -> None:
         "count: 12",
     ):
         assert required_snippet in sources_yml
+
+
+def test_sample_mode_dbt_contract_routes_sources_and_schemas_to_sample_datasets() -> None:
+    sources_yml = _read("dbt/models/sources.yml")
+    meta_schema = _read("dbt/models/meta/schema.yml")
+    dbt_project = _read("dbt/dbt_project.yml")
+    profiles_yml = _read("dbt/profiles.yml")
+
+    for required_snippet in (
+        "BQ_DATASET_RAW_SAMPLE",
+        "target.name == 'sample'",
+        "BQ_DATASET_META_SAMPLE",
+        "BQ_DATASET_STAGING_SAMPLE",
+        "BQ_DATASET_MARTS_SAMPLE",
+        "sample:\n      type: bigquery",
+    ):
+        assert (
+            required_snippet in sources_yml
+            or required_snippet in meta_schema
+            or required_snippet in dbt_project
+            or required_snippet in profiles_yml
+        )
+
+
+def test_dag_contract_uses_sample_aware_dbt_target_resolution() -> None:
+    dag_source = _read("airflow/dags/eia_grid_batch.py")
+
+    assert "resolve_dbt_target" in dag_source
+    assert "sample_mode_enabled" in dag_source
+    assert "--target {_dbt_target()}" in dag_source
