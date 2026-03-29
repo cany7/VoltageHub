@@ -13,10 +13,11 @@ voltage_hub:
       priority: interactive
     ci:
       type: bigquery
-      method: oauth
-      project: "ci-placeholder"
-      dataset: "ci_placeholder"
-      location: "us-central1"
+      method: service-account
+      project: "{{ env_var('GCP_PROJECT_ID', 'ci-placeholder') }}"
+      dataset: "{{ env_var('BQ_DATASET_STAGING', 'staging') }}"
+      keyfile: "{{ env_var('GCP_SERVICE_ACCOUNT_KEY_PATH') }}"
+      location: "{{ env_var('GCP_REGION', 'us-central1') }}"
       threads: 1
       timeout_seconds: 300
       priority: interactive

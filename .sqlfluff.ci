@@ -1,0 +1,14 @@
+[sqlfluff]
+dialect = bigquery
+templater = jinja
+
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = True
+library_path = sqlfluff_libs
+
+[sqlfluff:templater:jinja:macros]
+dbt_ref = {% macro ref(model_ref) %}{{ model_ref }}{% endmacro %}
+dbt_source = {% macro source(source_name, table_name) %}{{ source_name }}_{{ table_name }}{% endmacro %}
+dbt_config = {% macro config() %}{% for _ in kwargs %}{% endfor %}{% endmacro %}
+dbt_var = {% macro var(variable, default='') %}{{ default }}{% endmacro %}
+dbt_is_incremental = {% macro is_incremental() %}False{% endmacro %}

@@ -10,7 +10,9 @@ with raw_batch as (
     select *
     from {{ source('raw', 'eia_grid_batch') }}
     {% if var('batch_date', none) %}
-    where batch_date = date('{{ var("batch_date") }}')
+        where batch_date = date(
+            '{{ var("batch_date") }}'
+        )
     {% endif %}
 ),
 

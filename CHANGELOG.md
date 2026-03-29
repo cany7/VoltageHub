@@ -1,3 +1,82 @@
+## [2026-03-28 Round 30]
+
+### Completed
+- Replaced the failing CI `dbt compile` step with offline `dbt parse --no-populate-cache` validation for the BigQuery-backed dbt project
+- Updated the project documentation so CI now accurately states the non-GCP dbt validation path instead of claiming warehouse-touching `compile` behavior is offline-safe
+
+### Files Added/Modified
+- `.github/workflows/dbt_compile.yml`
+- `DOCS/SPEC.md`
+- `DOCS/ARCHITECTURE.md`
+- `DOCS/TESTING.md`
+- `DOCS/TASKS.md`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No API, warehouse, DAG, or real-environment behavior changes
+- CI dbt validation now uses offline parsing instead of compile because the BigQuery adapter may populate relation caches during `dbt compile`, which violates the project requirement that CI must not touch GCP
+
+### Tests Added/Passed
+- Pending in this round: rerun the updated GitHub Actions dbt workflow with the offline parse command
+
+### Known Issues
+- The workflow file remains named `dbt_compile.yml` for continuity with the original Phase 4 task naming, even though it now performs offline dbt parsing
+- dbt Core 1.8 does not support `--no-introspect` for `dbt parse`; the workflow must use `--no-populate-cache` instead to stay consistent with the actual CLI surface
+
+## [2026-03-28 Round 29]
+
+### Completed
+- Reworked SQLFluff CI to be fully offline and no longer depend on the dbt BigQuery adapter
+- Added a dedicated CI SQLFluff config that uses the `jinja` templater with dbt builtins plus a minimal `dbt_utils.generate_surrogate_key()` stub for parseable rendering
+- Removed the CI-only `target = ci` override from the default local `.sqlfluff` config so local dbt-templater behavior remains unchanged
+
+### Files Added/Modified
+- `.sqlfluff`
+- `.sqlfluff.ci`
+- `sqlfluff_libs/dbt_utils.py`
+- `.github/workflows/lint.yml`
+- `dbt/models/staging/stg_grid_metrics.sql`
+- `dbt/models/marts/core/fct_grid_metrics.sql`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No API, warehouse, DAG, or real-environment behavior changes
+- The lint workflow is now intentionally split from dbt adapter behavior: `sqlfluff` runs offline with Jinja-based dbt stubs, while dbt semantic validation remains the responsibility of the separate `dbt_compile` workflow
+
+### Tests Added/Passed
+- Passed: `uv run sqlfluff lint --config .sqlfluff.ci dbt/models`
+- Passed: `uv run ruff check .`
+- Passed: `uv run pytest -q tests/unit/test_eia_grid_batch_tasks.py tests/unit/test_dbt_testing_contracts.py` (`18 passed`)
+
+### Known Issues
+- The dedicated CI SQLFluff config is intentionally less faithful to runtime dbt rendering than the dbt templater; this is a deliberate tradeoff to keep CI fully offline and non-GCP
+
+## [2026-03-28 Round 28]
+
+### Completed
+- Fixed the first post-push CI regressions in the early Phase 1 / 2 workflow set
+- Updated the Terraform setup action to the current official `v3` major line
+- Corrected the dbt-based CI steps so SQLFluff installs dbt packages first and dbt compile uses a structurally valid placeholder service-account key instead of an invalid empty JSON file
+
+### Files Added/Modified
+- `.github/workflows/lint.yml`
+- `.github/workflows/dbt_compile.yml`
+- `.github/workflows/terraform_validate.yml`
+- `dbt/profiles.yml`
+- `CHANGELOG.md`
+
+### Interface or Behavior Changes
+- No API, warehouse, DAG, or real-environment behavior changes
+- CI continues to avoid real GCP execution, but now provides a valid placeholder credential shape for parse/compile-only BigQuery adapter initialization
+- `Task 4.1` remains in progress overall because Phase 3 serving-layer tests still need future CI expansion
+
+### Tests Added/Passed
+- Not run locally in this round: the failing GitHub Actions steps were fixed directly from the concrete CI logs you provided
+- Previously still passing locally: `uv run ruff check .`, `uv run pytest -q tests/unit/test_eia_grid_batch_tasks.py tests/unit/test_dbt_testing_contracts.py`, `terraform -chdir=terraform fmt -check -recursive`
+
+### Known Issues
+- If GitHub still reports a Node runtime deprecation warning for `hashicorp/setup-terraform@v3`, that warning is upstream-action runtime policy rather than a repository Terraform configuration problem
+
 ## [2026-03-28 Round 27]
 
 ### Completed

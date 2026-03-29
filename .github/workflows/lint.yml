@@ -10,16 +10,6 @@ permissions:
 jobs:
   lint:
     runs-on: ubuntu-latest
-    env:
-      GCP_PROJECT_ID: ci-placeholder
-      GCP_REGION: us-central1
-      GCP_SERVICE_ACCOUNT_KEY_PATH: /tmp/ci-service-account.json
-      GOOGLE_APPLICATION_CREDENTIALS: /tmp/ci-service-account.json
-      BQ_DATASET_RAW: raw
-      BQ_DATASET_STAGING: staging
-      BQ_DATASET_MARTS: marts
-      BQ_DATASET_META: meta
-      UV_CACHE_DIR: /tmp/uv-cache
     steps:
       - uses: actions/checkout@v6
 
@@ -32,9 +22,6 @@ jobs:
       - name: Sync project dependencies
         run: uv sync --all-groups --frozen
 
-      - name: Create placeholder service-account file
-        run: printf '{}' > "$GCP_SERVICE_ACCOUNT_KEY_PATH"
-
       - name: Run Ruff
         run: uv run ruff check .
 
@@ -42,4 +29,4 @@ jobs:
         run: uv run pytest -q tests/unit/test_eia_grid_batch_tasks.py tests/unit/test_dbt_testing_contracts.py
 
       - name: Run SQLFluff
-        run: uv run --with 'dbt-core==1.8.*' --with 'dbt-bigquery==1.8.*' sqlfluff lint dbt/models
+        run: uv run sqlfluff lint --config .sqlfluff.ci dbt/models

@@ -1,4 +1,4 @@
-name: dbt Compile
+name: dbt Parse
 
 on:
   push:
@@ -30,7 +30,30 @@ jobs:
       - uses: astral-sh/setup-uv@v7
 
       - name: Create placeholder service-account file
-        run: printf '{}' > "$GCP_SERVICE_ACCOUNT_KEY_PATH"
+        run: |
+          openssl genrsa -out /tmp/ci-private-key.pem 2048
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = {
+              "type": "service_account",
+              "project_id": os.environ["GCP_PROJECT_ID"],
+              "private_key_id": "ci-placeholder-key-id",
+              "private_key": Path("/tmp/ci-private-key.pem").read_text(encoding="utf-8"),
+              "client_email": "ci-placeholder@ci-placeholder.iam.gserviceaccount.com",
+              "client_id": "123456789012345678901",
+              "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+              "token_uri": "https://oauth2.googleapis.com/token",
+              "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+              "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/ci-placeholder%40ci-placeholder.iam.gserviceaccount.com",
+          }
+          Path(os.environ["GCP_SERVICE_ACCOUNT_KEY_PATH"]).write_text(
+              json.dumps(payload),
+              encoding="utf-8",
+          )
+          PY
 
       - name: Install dbt tooling
         run: uv sync --all-groups --frozen
@@ -38,5 +61,5 @@ jobs:
       - name: Install dbt packages
         run: uv run --with 'dbt-core==1.8.*' --with 'dbt-bigquery==1.8.*' dbt deps --project-dir dbt --profiles-dir dbt
 
-      - name: Compile dbt project
-        run: uv run --with 'dbt-core==1.8.*' --with 'dbt-bigquery==1.8.*' dbt compile --target ci --project-dir dbt --profiles-dir dbt
+      - name: Parse dbt project offline
+        run: uv run --with 'dbt-core==1.8.*' --with 'dbt-bigquery==1.8.*' dbt parse --target ci --no-populate-cache --project-dir dbt --profiles-dir dbt
