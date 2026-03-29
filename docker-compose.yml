@@ -79,5 +79,19 @@ services:
       - ./dbt:/opt/airflow/dbt
       - ./keys/service-account.json:/opt/airflow/keys/service-account.json:ro
 
+  serving-fastapi:
+    build:
+      context: ./serving-fastapi
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/opt/airflow/keys/service-account.json}
+      PORT: ${PORT:-8090}
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./keys/service-account.json:/opt/airflow/keys/service-account.json:ro
+
 volumes:
   postgres-db-volume:
