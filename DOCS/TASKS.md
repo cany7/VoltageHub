@@ -172,9 +172,9 @@ Development follows the order prescribed by the SPEC (Section 19). Each phase un
 
 ---
 
-## Phase 3: Serving Layer (FastAPI)
+## Phase 3: Serving Layer (FastAPI + MCP)
 
-> **Goal:** Build the read-only API that exposes pre-computed indicators and pipeline health.
+> **Goal:** Build the read-only serving layer that exposes pre-computed indicators and pipeline health through REST and MCP interfaces.
 
 ### 3.1 Project Scaffold
 
@@ -228,6 +228,38 @@ Development follows the order prescribed by the SPEC (Section 19). Each phase un
 - [x] Verify: Docker build and run works for the serving container
 
 **Acceptance:** All serving API verification criteria from SPEC Section 17 pass.
+
+### 3.8 MCP Server (`stdio`)
+
+- [ ] Create `mcp/` directory structure and `pyproject.toml` for the MCP server package
+- [ ] Create a package entrypoint named `voltagehub-mcp` for the MCP server
+- [ ] Create MCP `stdio` entrypoint and process bootstrap
+- [ ] Wire MCP adapters to shared serving logic and repositories instead of calling REST over HTTP
+- [ ] Implement MCP tool registration for the 6 fixed read-only tools:
+  - `get_load_trends`
+  - `get_generation_mix`
+  - `get_top_demand_regions`
+  - `check_data_freshness`
+  - `get_anomalies`
+  - `get_pipeline_status`
+- [ ] Implement MCP resource registration for the 4 fixed resources:
+  - `schema://grid-metrics`
+  - `status://data-quality`
+  - `schema://regions`
+  - `schema://energy-sources`
+- [ ] Ensure `get_top_demand_regions` returns per-day top-N rankings only and does not imply whole-period ranking
+- [ ] Ensure `get_generation_mix` percentage support is a row-level derived field for per-day, per-region share only
+- [ ] Implement region normalization behavior for canonical `region` and exact case-insensitive `region_name`; do not implement alias matching in v1
+- [ ] Keep `schema://regions` v1 limited to `region` and `region_name`
+- [ ] Keep `schema://energy-sources` v1 limited to canonical `energy_source`
+- [ ] Implement MCP response shaping with `summary`, `highlights`, `data`, and `metadata`
+- [ ] Implement MCP-specific validation, overflow, and error behavior, including `unsupported_capability`
+- [ ] Add MCP tool/resource tests covering registration, validation, response envelopes, resource payloads, normalization, empty results, and overflow behavior
+- [ ] Do not add agent usability tests or remote transport support in this phase
+- [ ] Ensure the package can be launched locally with `uv run voltagehub-mcp`
+- [ ] Ensure the package can be consumed by agent hosts via `uvx voltagehub-mcp`
+
+**Acceptance:** MCP starts in `stdio` mode, exposes the documented tools/resources, supports `uv run voltagehub-mcp` for local development and `uvx voltagehub-mcp` for host integration, passes MCP tool/resource tests, and defers all detailed MCP contracts to `DOCS/MCP.md`.
 
 ---
 
@@ -283,7 +315,7 @@ Phase 1.1 (Terraform) ──► Phase 1.2 (Docker/Airflow)
 Phase 2 (Meta/Freshness)   Phase 1.7 (Makefile)
   │
   ▼
-Phase 3 (Serving API)
+Phase 3 (Serving Layer)
   │
   ▼
 Phase 4 (CI/Docs/Polish)

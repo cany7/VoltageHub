@@ -188,6 +188,37 @@ curl http://localhost:8090/pipeline/status
 curl "http://localhost:8090/metrics/load?region=US48&start_date=2026-03-27&end_date=2026-03-27&granularity=daily"
 ```
 
+### 4.3 MCP Server
+
+The MCP server is a **stdio** process for agent hosts. In development, run it locally with `uv run`. For real agent integration, the preferred delivery model is a published `uvx` package.
+
+Local development shape:
+
+```bash
+cd mcp
+uv sync
+uv run voltagehub-mcp
+```
+
+Agent-host integration shape:
+
+```json
+{
+  "mcpServers": {
+    "voltagehub": {
+      "command": "uvx",
+      "args": ["voltagehub-mcp"]
+    }
+  }
+}
+```
+
+Important notes:
+
+- The host application executes the configured `uvx` command and starts the MCP process
+- The model does not invent or run this command itself; it only calls Tools / Resources after the host has connected
+- `uvx` is recommended for packaged distribution to agent hosts, while `uv run` remains the preferred local developer workflow
+
 ---
 
 ## 5. Verify
@@ -206,6 +237,7 @@ After at least one successful DAG run, confirm the following:
 | `/freshness` | Returns `pipeline_freshness_timestamp` and `data_freshness_timestamp` |
 | `/pipeline/status` | Returns latest successful window and `last_successful_run_id` |
 | Metrics endpoint | Returns precomputed analytical results |
+| MCP startup | Host can launch `voltagehub-mcp` over `stdio` |
 
 ---
 

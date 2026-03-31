@@ -7,11 +7,12 @@
 Before writing any code, read these documents in this order:
 
 1. **`DOCS/SPEC.md`** — ultimate source of truth. If any other document contradicts SPEC.md, SPEC.md wins.
-2. **`DOCS/ARCHITECTURE.md`** — system structure, component boundaries, data flow, design decisions.
-3. **`DOCS/TASKS.md`** — what to build, in what order, with acceptance criteria.
-4. **`DOCS/INTERFACES.md`** — table schemas, API contracts, GCS paths, config schema. Reference this when writing any code that reads/writes data.
-5. **`DOCS/TESTING.md`** — what to test, how, and what must pass before a milestone is done.
-6. **`DOCS/CHANGELOG.md`**  — what previous agents built, what changed, what is still unresolved. Read this before starting any work.
+2. **`DOCS/MCP.md`** — authoritative source for MCP-specific tool/resource contracts, response semantics, and implementation constraints. For MCP work, follow this document over more general MCP mentions elsewhere.
+3. **`DOCS/ARCHITECTURE.md`** — system structure, component boundaries, data flow, design decisions.
+4. **`DOCS/TASKS.md`** — what to build, in what order, with acceptance criteria.
+5. **`DOCS/INTERFACES.md`** — table schemas, REST API contracts, GCS paths, config schema. Reference this when writing any code that reads/writes data.
+6. **`DOCS/TESTING.md`** — what to test, how, and what must pass before a milestone is done.
+7. **`DOCS/CHANGELOG.md`**  — what previous agents built, what changed, what is still unresolved. Read this before starting any work.
 
 ---
 
@@ -31,11 +32,12 @@ Before writing any code, read these documents in this order:
 When making implementation decisions:
 
 1. **SPEC.md** — if SPEC.md specifies behavior, follow it exactly
-2. **INTERFACES.md** — if INTERFACES.md specifies a schema or contract, use those exact field names and types
-3. **ARCHITECTURE.md** — for component boundaries, data flow, and design decisions
-4. **TASKS.md** — for scope and ordering
+2. **MCP.md** — for all MCP-specific tool/resource definitions, parameter semantics, normalization rules, response envelopes, and overflow/error behavior
+3. **INTERFACES.md** — if INTERFACES.md specifies a schema or REST contract, use those exact field names and types
+4. **ARCHITECTURE.md** — for component boundaries, data flow, and design decisions
+5. **TASKS.md** — for scope and ordering
 
-If you encounter a conflict between documents, SPEC.md is authoritative. Flag the conflict in your changelog entry.
+If you encounter a conflict between documents, SPEC.md is authoritative. For MCP-specific details, treat `DOCS/MCP.md` as the governing interface document unless SPEC.md explicitly says otherwise. Flag the conflict in your changelog entry.
 
 ---
 
@@ -57,6 +59,8 @@ Unless explicitly required by SPEC.md:
 - Do not change the DAG task sequence or add new DAG tasks
 - Do not create new BigQuery datasets beyond `raw`, `staging`, `marts`, `meta`
 - Do not add new API endpoints beyond those specified
+- Do not add MCP transports beyond `stdio`
+- Do not add new MCP tools or resources beyond those specified in `DOCS/MCP.md`
 - Do not introduce streaming, async workers, or external caching
 - Do not change partition keys or clustering strategies
 - Do not change the GCS path convention
@@ -75,6 +79,7 @@ Unless explicitly required by SPEC.md:
 | DAG task sequence                   | `ARCHITECTURE.md` data flow diagram, `TASKS.md` if acceptance criteria affected |
 | Environment variables               | `.env.example`, `INTERFACES.md` config schema, `ARCHITECTURE.md` config section |
 | Error handling behavior             | `ARCHITECTURE.md` error handling section, `TESTING.md` edge cases   |
+| MCP tool/resource contract          | `DOCS/MCP.md`, MCP tests, and any MCP-facing schemas or adapters    |
 
 ---
 
@@ -82,7 +87,7 @@ Unless explicitly required by SPEC.md:
 
 1. **Partition rebuild scoping is critical.** Every incremental dbt model must scope its rebuild to the affected `observation_date` set, not all partitions. Incorrect scoping causes silent data corruption or unnecessary cost. Always test with extraction windows that span date boundaries.
 
-2. **The serving API reads only `agg_*` and `meta.*` tables.** It never queries `raw`, `staging`, or `fct_grid_metrics`. If you find yourself writing a query against fact tables in the serving layer, stop — the data should come from an aggregate table.
+2. **The serving layer reads only serving-safe tables.** REST reads `agg_*` and `meta.*`. MCP may also read `marts.dim_region` and `marts.dim_energy_source` for schema resources and normalization support. It must never query `raw`, `staging`, or `fct_grid_metrics` directly. If you find yourself writing a query against fact tables in the serving layer, stop — the data should come from an aggregate table or serving-safe dimension table.
 
 3. **`max_active_runs=1` is intentional.** Do not change this to parallelize backfill without also changing the partition strategy from `WRITE_TRUNCATE` to `WRITE_APPEND` with conflict resolution.
 
@@ -97,6 +102,8 @@ Unless explicitly required by SPEC.md:
 8. **dbt `deps` must run before any dbt command.** Ensure this happens either in the Docker entrypoint or as a Makefile target after `docker compose up`.
 
 9. **Avoid destructive Terraform re-validation unless it is truly required.** Task 1.1 infrastructure has already been confirmed, so later testing should avoid `terraform destroy` / full reprovision whenever possible. Some later GCS / BigQuery / IAM issues may still require reprovisioning, but this should be treated as a last resort and surfaced to the user before proceeding. If infrastructure must be recreated, tell the user they need to regenerate and place the service account JSON key again, then restart `docker compose` so the containers pick up the re-mounted key file before continuing validation.
+
+10. **For MCP work, `DOCS/MCP.md` is the contract.** Use it as the source of truth for tool names, required vs optional inputs, normalization rules, derived fields, result size guards, and MCP-specific error semantics. Do not infer richer MCP behavior from older generic serving docs.
 
 ---
 

@@ -4,14 +4,14 @@
 
 ## 1. Testing Philosophy
 
-This project has three distinct runtime systems — infrastructure provisioning, a batch ELT pipeline, and a serving API — each with different failure modes. Testing must cover:
+This project has three distinct runtime systems — infrastructure provisioning, a batch ELT pipeline, and a serving layer — each with different failure modes. Testing must cover:
 
 - **Infrastructure correctness** — cloud resources exist and are configured properly
 - **Pipeline reliability** — data flows end-to-end, partitions rebuild idempotently, quality gates enforce invariants
 - **Warehouse model correctness** — dbt transformations produce expected outputs, tests enforce schema contracts
-- **Serving API contract compliance** — endpoints return valid responses with correct metadata against real warehouse data
+- **Serving interface contract compliance** — REST endpoints and MCP tools/resources return valid responses with correct metadata against real warehouse data
 
-Testing is not bolted on at the end. dbt tests run inside the pipeline (`dbt build`). Freshness and anomaly checks are first-class pipeline tasks. Serving API validation runs against populated BigQuery tables.
+Testing is not bolted on at the end. dbt tests run inside the pipeline (`dbt build`). Freshness and anomaly checks are first-class pipeline tasks. Serving validation runs against populated BigQuery tables, with MCP testing intentionally scoped to tool/resource behavior rather than end-to-end agent evaluation.
 
 ---
 
@@ -104,7 +104,7 @@ These run automatically as part of `dbt build`. They are not separate from the p
 - Heavy backfill validation anchors its expected windows on Airflow backfill logical dates (`window_start` semantics). By default it backfills the `VOLTAGE_HUB_TEST_BACKFILL_HOURS` windows immediately preceding `VOLTAGE_HUB_TEST_BACKFILL_END_BOUNDARY=2026-03-27T00:00:00+00:00`
 - **Separate failure-path path:** run freshness-threshold and forced-failure validation independently from smoke and heavy coverage because they intentionally create stale or failing conditions in isolated temporary datasets and are best treated as targeted operational checks rather than every-change regression tests
 
-### 2.6 Serving API Tests
+### 2.6 Serving REST API Tests
 
 | Test                                          | Method                                          | Pass Criteria                                                     |
 |-----------------------------------------------|-------------------------------------------------|-------------------------------------------------------------------|
@@ -121,7 +121,31 @@ These run automatically as part of `dbt build`. They are not separate from the p
 
 **Approach:** Integration-level tests against a running FastAPI instance with populated BigQuery tables. Mock BigQuery client for unit-level service/repository tests.
 
-### 2.7 CI Validation
+### 2.7 MCP Tool and Resource Tests
+
+| Test                                          | Method                                          | Pass Criteria                                                     |
+|-----------------------------------------------|-------------------------------------------------|-------------------------------------------------------------------|
+| MCP server startup                            | Launch MCP process over `stdio` via `uv run voltagehub-mcp` or host-equivalent `uvx voltagehub-mcp` | Process starts cleanly and exposes expected registration          |
+| Tool discovery                                | MCP tool list/query                             | All 6 documented tools are registered                            |
+| Resource discovery                            | MCP resource list/query                         | All 4 documented resources are registered                        |
+| Tool success envelope                         | MCP tool invocation                             | Response contains `summary`, `highlights`, `data`, `metadata`    |
+| Tool error envelope                           | MCP tool invocation with bad inputs             | Structured MCP error category is returned                        |
+| Resource payload structure                    | MCP resource read                               | Payload shape matches documented v1 guarantees                   |
+| Mapping correctness                           | Compare MCP tool semantics to shared serving capability | Tool behavior matches the corresponding REST/service semantics |
+| Region normalization                          | MCP tool invocation with canonical `region` and exact `region_name` | Deterministic normalization succeeds; aliases are not required |
+| Empty-result behavior                         | Valid MCP query with no matching rows           | Success envelope with empty `data` and deterministic summary     |
+| Time-semantics behavior                       | MCP date-filtered calls                         | Inclusive `observation_date` filtering behaves as documented     |
+| Oversize / validation-first behavior          | Wide MCP queries                                | Validation-first tools reject oversize requests deterministically |
+| Truncation behavior                           | Large anomaly query without date filters        | Truncation is explicit in metadata when applied                  |
+
+**Approach:** MCP-focused tests should stop at tool/resource behavior. They should validate startup, discovery, contracts, normalization, and overflow behavior without adding agent usability tests or remote transport tests. Prefer local dev verification through `uv run voltagehub-mcp`, and treat `uvx voltagehub-mcp` as the equivalent packaged-host startup shape.
+
+Out of scope:
+- automated end-to-end prompt-loop evaluation
+- agent usability tests
+- HTTP, SSE, or other remote transport testing
+
+### 2.8 CI Validation
 
 | Test                          | Method                              | Pass Criteria            |
 |-------------------------------|-------------------------------------|--------------------------|
@@ -143,7 +167,8 @@ Prioritized by blast radius and likelihood of failure:
 3. **Staging canonicalization** — type casting, field mapping, surrogate key generation. Bad mapping corrupts all downstream tables. Test with varied raw payloads.
 4. **Idempotent rerun** — re-running a window must produce identical output. Test explicitly by running same window twice and diffing results.
 5. **Freshness two-signal logic** — combined status derivation (worst of pipeline + data). Test edge cases: one fresh + one stale, both stale, both fresh, missing data.
-6. **Serving API response contracts** — metadata fields (`data_as_of`, `pipeline_run_id`, `freshness_status`) must be present in every data response. Test separately from data correctness.
+6. **Serving interface response contracts** — REST metadata fields and MCP response envelopes must remain stable. Test separately from data correctness.
+7. **MCP normalization and overflow behavior** — region normalization, validation-first limits, and explicit truncation rules are easy to drift. Test these directly.
 
 ---
 
@@ -165,6 +190,10 @@ Prioritized by blast radius and likelihood of failure:
 | Run fails after control-plane tasks are eligible | `meta.run_metrics.status` records `failed` and freshness logging follows documented fallback behavior |
 | Meta tables missing/empty                 | Serving API endpoints return appropriate error or empty state  |
 | Serving API called before any pipeline run | Freshness/status endpoints handle gracefully (empty/unknown)  |
+| MCP `get_load_trends(hourly)` over more than 7 days | Returns `validation_error`; request is not auto-shortened |
+| MCP request asks for whole-period top-region ranking | Returns `unsupported_capability` rather than per-day data misrepresented as a total leaderboard |
+| Valid MCP query returns no matching rows  | Returns success envelope with empty `data` and deterministic summary |
+| MCP freshness query with no freshness rows | Returns deterministic payload with `freshness_status = "unknown"` |
 
 ---
 
@@ -181,6 +210,7 @@ Prioritized by blast radius and likelihood of failure:
 - **Do not test dbt models with mock data outside dbt.** Use dbt's own test framework against real warehouse tables. dbt tests are part of the pipeline, not a separate test suite.
 - **Do not mock BigQuery for integration tests.** Integration tests must verify real query execution against actual datasets.
 - **Do not test aggregate correctness through the serving API alone.** Validate aggregate tables directly in BigQuery first; then verify the serving API returns the same data.
+- **Do not treat MCP as an agent-evaluation surface in v1.** Test tools/resources directly; do not expand this phase into agent usability or prompt-loop testing.
 - **Do not skip idempotency testing.** Idempotent rerun is a core design guarantee. Test it explicitly.
 - **Do not treat anomaly detection as pass/fail.** It is warning-only. Tests should verify results are recorded, not that specific anomalies are flagged.
 - **Do not test CI workflows by connecting to GCP.** CI validates syntax only.
@@ -207,6 +237,9 @@ Prioritized by blast radius and likelihood of failure:
 - Health endpoint returns 200 independently of BigQuery
 - Data endpoints include `data_as_of`, `pipeline_run_id`, `freshness_status`
 - Invalid parameters return structured errors
+- MCP server starts in `stdio` mode and exposes the documented tools/resources
+- MCP tool/resource tests pass for registration, envelopes, normalization, and overflow behavior
+- No agent usability testing is required for MCP v1
 
 ### Phase 4 Complete When:
 - All CI workflows pass on a clean PR

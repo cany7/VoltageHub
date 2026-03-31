@@ -4,7 +4,7 @@
 
 ## 1. Project Purpose
 
-This project builds a **batch analytics data product** on GCP that incrementally extracts U.S. grid operations data from EIA public APIs, lands raw responses in GCS, transforms them through a layered BigQuery warehouse (raw → staging → marts → meta) using dbt, and exposes fixed analytical indicators and pipeline health through a lightweight FastAPI serving API. The pipeline is orchestrated by Apache Airflow, provisioned via Terraform, and containerized with Docker Compose for local development.
+This project builds a **batch analytics data product** on GCP that incrementally extracts U.S. grid operations data from EIA public APIs, lands raw responses in GCS, transforms them through a layered BigQuery warehouse (raw → staging → marts → meta) using dbt, and exposes fixed analytical indicators and pipeline health through a lightweight serving layer composed of a FastAPI REST API and a stdio MCP server. The pipeline is orchestrated by Apache Airflow, provisioned via Terraform, and containerized with Docker Compose for local development.
 
 ---
 
@@ -17,7 +17,7 @@ This project builds a **batch analytics data product** on GCP that incrementally
 - BigQuery warehouse: `raw`, `staging`, `marts`, `meta` datasets
 - dbt transformations, tests, freshness checks, anomaly detection
 - Airflow DAG for end-to-end orchestration (scheduled sync + backfill)
-- FastAPI serving layer (read-only, fixed-template endpoints)
+- Serving layer with a FastAPI REST API and a stdio MCP server
 - Terraform IaC for core GCP infrastructure
 - Docker Compose local deployment
 - GitHub Actions CI (lint, offline dbt parse, validate)
@@ -27,6 +27,7 @@ This project builds a **batch analytics data product** on GCP that incrementally
 - Real-time streaming (Kafka, Flink)
 - Distributed compute (Spark, Dataproc)
 - gRPC, microservice splitting, Kubernetes
+- HTTP, SSE, or other remote MCP transports
 - Redis or external caching
 - Dynamic SQL / ad-hoc query surface
 - ML/forecasting models
@@ -79,13 +80,13 @@ The `meta/` folder documents the control-plane table contracts for dbt docs cons
 
 Package dependency: `dbt-labs/dbt_utils` (>=1.0.0, <2.0.0)
 
-### 3.4 Serving API (FastAPI)
+### 3.4 Serving API (FastAPI REST Adapter)
 
 **Directory:** `serving-fastapi/`
 **Entrypoint:** `serving-fastapi/app/main.py` (the `app` object is defined here)
 **Dependencies:** declared in `serving-fastapi/pyproject.toml`; managed locally via `uv`
 
-Read-only query facade over pre-built aggregate and meta tables.
+Read-only REST query facade over pre-built aggregate and meta tables.
 
 Packages (under `serving-fastapi/app/`):
 - `routers/` — endpoint handlers
@@ -97,9 +98,42 @@ Packages (under `serving-fastapi/app/`):
 - `health/` — health/status endpoints
 - `exceptions/` — error handlers
 
-Data scope: reads **only** from `marts.agg_*` and `meta.*` tables. Never queries `raw` or `staging`.
+Data scope: reads **only** from `marts.agg_*` and `meta.*` tables. Never queries `raw`, `staging`, or `fct_grid_metrics`.
 
-### 3.5 CI (GitHub Actions)
+### 3.5 MCP Server (`stdio`)
+
+**Directory:** `mcp/`
+**Entrypoint:** `mcp/app/main.py`
+**Dependencies:** declared in `mcp/pyproject.toml`; managed locally via `uv`
+
+Read-only MCP interface for LLM agents over the same serving-safe warehouse outputs.
+
+Recommended structure (under `mcp/app/`):
+- `adapters/` — MCP-to-service translation layer
+- `tools/` — fixed MCP tool definitions
+- `resources/` — fixed MCP resource definitions
+- `config/` — settings and shared client wiring
+
+Dependency direction:
+
+```text
+BigQuery repositories -> shared service semantics -> FastAPI REST adapters
+BigQuery repositories -> shared service semantics -> MCP stdio adapters
+```
+
+Important constraints:
+- MCP is `stdio` only
+- MCP must not call the REST API over HTTP
+- MCP is another serving interface, not a second analytics engine
+- REST and MCP share core business semantics, while MCP may add adapter-level agent-facing safety semantics
+
+Data scope:
+- REST reads `marts.agg_*` and `meta.*`
+- MCP reads `marts.agg_*`, `meta.*`, and may additionally read `marts.dim_region` and `marts.dim_energy_source` for schema resources and normalization support
+
+For detailed MCP tool/resource contracts, normalization rules, truncation rules, and error semantics, defer to `DOCS/MCP.md`.
+
+### 3.6 CI (GitHub Actions)
 
 **Directory:** `.github/workflows/`
 
@@ -140,6 +174,11 @@ record_run_metrics        ← PythonOperator, writes to meta.run_metrics
     │
     ▼
 update_pipeline_state     ← PythonOperator, updates meta.pipeline_state watermark
+    │
+    ▼
+Serving Layer
+    ├── FastAPI REST API  ← fixed HTTP endpoints over aggregate/meta tables
+    └── MCP Server        ← fixed stdio tools/resources for agent use
 ```
 
 ### Partition Rebuild Logic (per run)
@@ -186,7 +225,7 @@ gs://<bucket>/voltage-hub/raw/year=YYYY/month=MM/day=DD/window=<start_iso>/batch
 | dbt artifacts        | `.env` or env vars                 | `DBT_RUN_RESULTS_PATH=/opt/airflow/dbt/target/run_results.json` |
 | Integration tests    | optional env vars                  | `VOLTAGE_HUB_RUN_PIPELINE_TESTS=1`, `VOLTAGE_HUB_RUN_HEAVY_PIPELINE_TESTS=1`, `VOLTAGE_HUB_TEST_EXECUTION_DATE=2026-03-27T01:00:00+00:00` |
 | Terraform variables  | `terraform.tfvars` (git-ignored)   | `project_id`, `region`, `bucket_name`                     |
-| Serving API          | `.env` or env vars                 | `GCP_PROJECT_ID`, `BQ_DATASET_MARTS`, `PORT`, `CACHE_TTL_SECONDS` |
+| Serving layer        | `.env` or env vars                 | `GCP_PROJECT_ID`, `BQ_DATASET_MARTS`, `BQ_DATASET_META`, `PORT`, `CACHE_TTL_SECONDS` |
 | Sample mode          | `.env` or env vars                 | `SAMPLE_MODE`, `BQ_DATASET_RAW_SAMPLE`, `BQ_DATASET_STAGING_SAMPLE`, `BQ_DATASET_MARTS_SAMPLE`, `BQ_DATASET_META_SAMPLE` |
 
 ### Authentication
@@ -247,7 +286,8 @@ gs://<bucket>/voltage-hub/raw/year=YYYY/month=MM/day=DD/window=<start_iso>/batch
 | `max_active_runs=1`                           | Guarantees partition-level idempotency; limits backfill throughput (acceptable at scale) |
 | `insert_overwrite` on date partitions         | Idempotent without row-level dedup; simple recovery model                               |
 | Aggregate tables as full rebuilds             | Cheap at expected scale (<1000 rows); avoids incremental complexity                     |
-| Serving API reads only `agg_*` and `meta.*`   | No runtime aggregation; all computation in dbt build time                               |
+| Serving layer reads only serving-safe outputs | REST reads `agg_*` and `meta.*`; MCP may additionally use `dim_region` and `dim_energy_source` for schema resources and normalization support |
+| MCP is a first-class serving interface        | Shared business semantics with REST; different transport and response shaping for agents |
 | Raw → GCS first, then BigQuery                | Enables replay, backfill, audit trail; decouples from source API                        |
 | In-memory TTL cache (optional)                | No external cache infra; simple first version                                           |
 | LocalExecutor                                 | Sufficient for single-project scale; avoids Celery/Kubernetes complexity                |
@@ -269,5 +309,5 @@ gs://<bucket>/voltage-hub/raw/year=YYYY/month=MM/day=DD/window=<start_iso>/batch
 - Freshness log (`meta.freshness_log`) — pipeline freshness + data freshness
 - Anomaly results (`meta.anomaly_results`)
 
-The control plane is **consumer-facing**: the serving API reads and exposes freshness, pipeline status, and anomaly summaries through dedicated endpoints.
+The control plane is **consumer-facing**: the serving layer reads and exposes freshness, pipeline status, and anomaly summaries through dedicated REST endpoints and MCP tools/resources.
 These tables are operational tables owned by Airflow tasks rather than dbt materializations.

@@ -188,6 +188,37 @@ curl http://localhost:8090/pipeline/status
 curl "http://localhost:8090/metrics/load?region=US48&start_date=2026-03-27&end_date=2026-03-27&granularity=daily"
 ```
 
+### 4.3 MCP Server
+
+MCP Server 是一个面向 Agent 宿主的 **stdio** 进程。开发阶段使用 `uv run` 本地启动；真正集成到 Agent 应用时，推荐以已发布的 `uvx` package 形态交付。
+
+本地开发形态：
+
+```bash
+cd mcp
+uv sync
+uv run voltagehub-mcp
+```
+
+Agent 宿主集成形态：
+
+```json
+{
+  "mcpServers": {
+    "voltagehub": {
+      "command": "uvx",
+      "args": ["voltagehub-mcp"]
+    }
+  }
+}
+```
+
+需要注意：
+
+- `uvx` 命令由宿主应用按配置执行，用于拉起 MCP 进程
+- 模型本身不会“自己发明并执行启动命令”，而是在宿主连通后调用 Tools / Resources
+- `uvx` 适合作为对 Agent 宿主的 package 化分发方式，而 `uv run` 仍然是本地开发阶段最合适的工作流
+
 ---
 
 ## 5. 验证
@@ -206,6 +237,7 @@ curl "http://localhost:8090/metrics/load?region=US48&start_date=2026-03-27&end_d
 | `/freshness` | 返回 `pipeline_freshness_timestamp` 和 `data_freshness_timestamp` |
 | `/pipeline/status` | 返回最新成功窗口和 `last_successful_run_id` |
 | 数据接口 | 返回预计算的分析结果 |
+| MCP 启动 | 宿主可通过 `stdio` 拉起 `voltagehub-mcp` |
 
 ---
 

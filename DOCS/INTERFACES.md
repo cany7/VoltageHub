@@ -2,11 +2,13 @@
 
 ---
 
-## 1. Serving API Endpoints
+## 1. Serving Interfaces
 
-The serving layer is a read-only, fixed-template query facade. All data endpoints return pre-computed results from aggregate and meta tables. No runtime aggregation.
+The serving layer is a read-only, fixed-template query facade exposed through REST and MCP interfaces. All serving outputs return pre-computed results from aggregate, meta, or serving-safe dimension tables. No runtime heavy aggregation.
 
-### 1.1 Control Plane Endpoints
+**MCP precedence note:** `DOCS/MCP.md` defines the authoritative MCP tool/resource contract. This document records only the stable system-level MCP interface summary and its alignment with REST capabilities, table contracts, and metadata semantics.
+
+### 1.1 REST Control Plane Endpoints
 
 #### GET /health
 
@@ -62,7 +64,7 @@ The serving layer is a read-only, fixed-template query facade. All data endpoint
   - `anomaly_flag` (boolean)
   - `checked_at` (ISO timestamp)
 
-### 1.2 Metric Endpoints
+### 1.2 REST Metric Endpoints
 
 All metric endpoint responses include these metadata fields:
 
@@ -114,6 +116,106 @@ All metric endpoint responses include these metadata fields:
   - Ranking and `daily_total_load` are pre-computed in dbt; the API only applies `WHERE` + `LIMIT` filters — no runtime aggregation
   - No cross-day summarization or re-ranking at query time
 - **Failure behavior:** 400 if dates invalid; empty list if no data in range
+
+### 1.3 MCP Tools
+
+MCP is a first-class serving interface exposed over `stdio`. It is not an HTTP wrapper and must not call the REST API over HTTP. MCP shares core business semantics with REST, but may add adapter-level safety semantics for agent use. Detailed MCP behavior, defaults, normalization rules, overflow behavior, and response shaping are defined in `DOCS/MCP.md`.
+
+#### `get_load_trends`
+
+- **Backed by REST capability:** `GET /metrics/load`
+- **Purpose:** Region-specific load trends over a date range
+- **Stable semantics:**
+  - same analytical capability as REST load metrics
+  - date filtering is on `observation_date`, inclusive on both bounds
+  - supports `daily` and `hourly` views through MCP adapter-level parameter translation
+
+#### `get_generation_mix`
+
+- **Backed by REST capability:** `GET /metrics/generation-mix`
+- **Purpose:** Region-specific generation mix over a date range
+- **Stable semantics:**
+  - grain remains `region × observation_date × energy_source`
+  - if percentage support is enabled, it is a row-level per-day, per-region derived field only
+  - it does not imply whole-period composition
+
+#### `get_top_demand_regions`
+
+- **Backed by REST capability:** `GET /metrics/top-regions`
+- **Purpose:** Per-day top-demand regional ranking in a date range
+- **Stable semantics:**
+  - returns pre-computed daily rankings only
+  - it does not provide whole-period cumulative ranking
+  - equivalent REST meaning uses `limit` per `observation_date`; MCP may expose `top_n`
+
+#### `check_data_freshness`
+
+- **Backed by REST capability:** `GET /freshness`
+- **Purpose:** Current pipeline/data freshness state for analytical trust checks
+
+#### `get_anomalies`
+
+- **Backed by REST capability:** `GET /anomalies`
+- **Purpose:** Recent anomaly detection results with optional filtering
+- **Stable semantics:**
+  - output preserves `anomaly_flag`
+  - canonical MCP parameter naming may use `anomaly_only`
+
+#### `get_pipeline_status`
+
+- **Backed by REST capability:** `GET /pipeline/status`
+- **Purpose:** Latest successful pipeline window and update state
+
+### 1.4 MCP Resources
+
+#### `schema://grid-metrics`
+
+- **Purpose:** Machine-readable discovery resource for MCP tools, defaults, limits, ordering, and supported metric concepts
+- **Notes:** Available date bounds may be derived from serving-safe aggregate tables; detailed shape is defined in `DOCS/MCP.md`
+
+#### `status://data-quality`
+
+- **Purpose:** Current operational context for freshness, pipeline state, and anomaly summary
+- **Notes:** Recent anomaly summary is anchored to the latest available `observation_date` in `meta.anomaly_results`
+
+#### `schema://regions`
+
+- **Purpose:** Canonical region discovery for MCP queries
+- **Guaranteed fields in v1:** `region`, `region_name`
+- **Scope note:** alias metadata is out of scope for v1
+
+#### `schema://energy-sources`
+
+- **Purpose:** Canonical energy-source discovery for generation-mix queries
+- **Guaranteed fields in v1:** `energy_source`
+- **Scope note:** richer semantic fields are out of scope for v1 unless the dimension schema expands
+
+### 1.5 MCP Common Response and Error Semantics
+
+Common MCP tool response envelope:
+
+```
+{
+  "summary": { ... },
+  "highlights": [ ... ],
+  "data": [ ... ],
+  "metadata": { ... }
+}
+```
+
+Metadata notes:
+- includes REST-aligned metadata semantics for `data_as_of`, `pipeline_run_id`, and `freshness_status`
+- may include MCP-only safety metadata such as truncation markers or source-table hints
+
+Error categories:
+- `validation_error`
+- `unsupported_capability`
+- `repository_error`
+
+Normalization and scope notes:
+- region normalization supports canonical `region` and exact case-insensitive `region_name`
+- aliases are out of scope for v1
+- detailed MCP defaults, limits, truncation behavior, and normalization rules defer to `DOCS/MCP.md`
 
 ---
 
@@ -171,10 +273,14 @@ All metric endpoint responses include these metadata fields:
 #### marts.dim_region
 
 - `region` (STRING, PK), `region_name` (STRING)
+- Supports MCP schema resources and region normalization support
+- Do not assume alias fields unless the dimension schema is explicitly expanded
 
 #### marts.dim_energy_source
 
 - `energy_source` (STRING, PK), optional category grouping fields
+- Supports MCP schema resources
+- Do not assume labels, descriptions, or categories in MCP v1 unless the dimension schema is explicitly expanded
 
 #### marts.agg_load_hourly
 
@@ -341,7 +447,7 @@ sources:
 
 ---
 
-## 6. Response Contract — Data Endpoint Metadata
+## 6. Response Contract — REST Data Endpoint Metadata
 
 Every data endpoint (load metrics, generation mix, top regions) wraps its response with:
 

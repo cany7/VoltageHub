@@ -170,15 +170,17 @@ The control plane is not just internal bookkeeping — it is consumed by the **s
 | Analytical warehouse | BigQuery | — |
 | Transformations | dbt Core | 1.8.x (installed in Airflow container) |
 | Infrastructure as code | Terraform | >= 1.5 |
-| CI | GitHub Actions | — |
+| Code quality / CI | Makefile + ruff + sqlfluff + pytest | This spec uses local commands and test suites as the primary validation surface |
+| Python dependency management | uv | Used for local command execution and `serving-fastapi` dependency management |
 | Containerization | Docker Compose | v2 |
 
-### Serving Layer (Python FastAPI)
+### Serving Layer (FastAPI + MCP)
 
 | Component | Technology | Version / Detail |
 |---|---|---|
 | Language | Python | 3.11+ |
 | Framework | FastAPI | latest |
+| Protocol | Model Context Protocol (MCP) | `stdio` transport |
 | Validation | Pydantic | v2 |
 | BigQuery access | BigQuery Python client | — |
 | Caching (optional) | `cachetools` or manual TTL dict | in-memory, TTL-based |
@@ -203,6 +205,7 @@ All services run in containers for local development.
 - **Airflow webserver** — UI on `localhost:8080`
 - **Airflow scheduler** — runs DAGs
 - **PostgreSQL** — Airflow metadata database
+- **Serving API** — read-only analytics interface on `localhost:8090`
 
 **Key tools installed in the Airflow container image:**
 - `dbt-core` + `dbt-bigquery`
@@ -226,11 +229,12 @@ requests
 
 | Service | Image | Purpose |
 |---|---|---|
-| `airflow-webserver` | Custom (extends `apache/airflow:2.9.3`) | Airflow UI |
+| `airflow-webserver` | Custom (extends `apache/airflow:2.9.3-python3.11`) | Airflow UI |
 | `airflow-scheduler` | Custom (same image) | DAG scheduling and execution |
 | `postgres` | `postgres:16` | Airflow metadata DB |
+| `serving-fastapi` | `serving-fastapi/Dockerfile` | Serving layer that reads from marts / meta |
 
-Volumes mount local `./airflow/dags`, `./airflow/plugins`, and `./dbt` into the Airflow containers.
+Local `./airflow/dags`, `./airflow/schemas`, `./airflow/plugins`, and `./dbt` are mounted into the Airflow containers; the Serving API container mounts the service-account key separately.
 
 ### 5.2 Configuration Management
 
@@ -244,9 +248,10 @@ Volumes mount local `./airflow/dags`, `./airflow/plugins`, and `./dbt` into the 
 | Layer | Mechanism | Examples |
 |---|---|---|
 | Secrets | `.env` file (git-ignored) + Docker Compose `env_file` | `GCP_PROJECT_ID`, `GCP_SERVICE_ACCOUNT_KEY_PATH` |
-| Airflow variables | `AIRFLOW_VAR_` prefix or JSON seed file | `AIRFLOW_VAR_GCS_BUCKET`, `AIRFLOW_VAR_BQ_DATASET_STAGING` |
+| Airflow variables | `AIRFLOW_VAR_` prefix or JSON seed file | `AIRFLOW_VAR_PIPELINE_SCHEDULE`, `AIRFLOW_VAR_PIPELINE_START_DATE` |
 | Airflow connections | `AIRFLOW_CONN_` prefix | `AIRFLOW_CONN_GOOGLE_CLOUD_DEFAULT` |
 | dbt profiles | `profiles.yml` with `env_var()` | `{{ env_var('GCP_PROJECT_ID') }}` |
+| Serving API | `.env` or environment variables | `PORT`, `CACHE_TTL_SECONDS` |
 | Terraform variables | `terraform.tfvars` (git-ignored) + `variables.tf` | `project_id`, `region`, `bucket_name` |
 
 **Required environment variables (`.env.example`):**
@@ -256,6 +261,7 @@ Volumes mount local `./airflow/dags`, `./airflow/plugins`, and `./dbt` into the 
 GCP_PROJECT_ID=your-gcp-project-id
 GCP_REGION=us-central1
 GCP_SERVICE_ACCOUNT_KEY_PATH=/opt/airflow/keys/service-account.json
+GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/keys/service-account.json
 
 # GCS
 GCS_BUCKET_NAME=voltage-hub-raw
@@ -265,6 +271,10 @@ BQ_DATASET_RAW=raw
 BQ_DATASET_STAGING=staging
 BQ_DATASET_MARTS=marts
 BQ_DATASET_META=meta
+BQ_DATASET_RAW_SAMPLE=raw_sample
+BQ_DATASET_STAGING_SAMPLE=staging_sample
+BQ_DATASET_MARTS_SAMPLE=marts_sample
+BQ_DATASET_META_SAMPLE=meta_sample
 
 # Airflow
 AIRFLOW__CORE__EXECUTOR=LocalExecutor
@@ -273,9 +283,15 @@ AIRFLOW__CORE__LOAD_EXAMPLES=False
 
 # Pipeline
 BACKFILL_DAYS=7
+SAMPLE_MODE=false
+DBT_RUN_RESULTS_PATH=/opt/airflow/dbt/target/run_results.json
 
 # EIA
 EIA_API_KEY=your-eia-api-key
+
+# Serving API
+PORT=8090
+CACHE_TTL_SECONDS=300
 ```
 
 **GCP authentication:** Mount service account JSON key at `/opt/airflow/keys/service-account.json`. Set `GOOGLE_APPLICATION_CREDENTIALS` to that path.
@@ -293,9 +309,10 @@ EIA_API_KEY=your-eia-api-key
 - dbt transformations, tests, freshness, and anomaly checks
 - Airflow end-to-end DAG with scheduled sync and backfill
 - Lightweight serving API (Python FastAPI)
+- `stdio` MCP server (read-only tools / resources for LLM agents)
 - IaC for core infrastructure
 - Docker Compose local deployment
-- CI for linting, offline dbt project validation, and infrastructure validation
+- Validation through GitHub Actions plus local lint, offline dbt validation, and infrastructure checks
 - Reproducibility documentation
 
 ### Out of Scope
@@ -307,35 +324,31 @@ EIA_API_KEY=your-eia-api-key
 - Redis or external caching
 - Dynamic SQL / arbitrary query engine
 - Ad-hoc analytics query surface
+- HTTP / SSE MCP transports
+- Agent usability testing / automated agent Q&A loop evaluation
 - Complex ML or forecasting
 - Real-time operational grid control systems
 - Cloud-managed Airflow (Cloud Composer)
-- Full enterprise observability or alerting platforms
 
 ---
 
 ## 7. Repository Structure
 
-```
+``` 
 voltage-hub/
-├── terraform/                          # IaC: GCS, BigQuery, IAM, service accounts
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── terraform.tfvars.example
-├── docker/
-│   └── Dockerfile                      # Custom Airflow image with dbt, GCP SDKs
+├── assets/                             # Project screenshots and demo assets
 ├── airflow/
 │   ├── dags/
-│   │   └── eia_grid_batch.py           # Main ELT DAG
-│   ├── schemas/
-│   │   └── raw_eia_batch.json          # Explicit BQ schema for raw landing table
-│   └── plugins/                        # Custom operators or helpers
+│   │   ├── eia_grid_batch.py           # Main DAG
+│   │   └── eia_grid_batch_tasks.py     # DAG task implementation
+│   └── schemas/
+│       └── raw_eia_batch.json          # BigQuery schema for raw landing
 ├── dbt/
 │   ├── dbt_project.yml
 │   ├── packages.yml
 │   ├── profiles.yml
 │   ├── models/
+│   │   ├── sources.yml
 │   │   ├── staging/
 │   │   │   ├── stg_grid_metrics.sql
 │   │   │   └── schema.yml
@@ -354,6 +367,9 @@ voltage-hub/
 │   │   └── meta/
 │   │       └── schema.yml
 │   └── macros/
+├── docker/
+│   ├── Dockerfile                      # Custom Airflow image
+│   └── docker-compose.yml
 ├── serving-fastapi/                    # FastAPI Serving Layer
 │   ├── app/
 │   │   ├── routers/
@@ -367,31 +383,67 @@ voltage-hub/
 │   │   └── main.py                     # Canonical entrypoint; defines `app` object
 │   ├── pyproject.toml
 │   └── Dockerfile
-├── docs/
-├── scripts/                            # Utilities for validation, debugging
-├── .github/workflows/                  # CI: lint, dbt parse, terraform validate
-├── docker-compose.yml
+├── mcp/                                # stdio MCP server
+│   ├── app/
+│   │   ├── tools/
+│   │   ├── resources/
+│   │   ├── adapters/
+│   │   ├── config/
+│   │   └── main.py
+│   └── pyproject.toml
+├── sqlfluff_libs/                      # sqlfluff config and helper libraries
+├── tests/
+│   ├── fixtures/
+│   ├── integration/
+│   └── unit/
+├── terraform/
+│   ├── main.tf
+│   ├── variables.tf
+│   ├── outputs.tf
+│   └── terraform.tfvars.example
+├── DOCS/
+│   ├── ARCHITECTURE.md
+│   ├── CHANGELOG.md
+│   ├── MCP.md
+│   ├── SETUP.md
+│   ├── SPEC.md
+│   ├── TASKS.md
+│   ├── TESTING.md
+│   └── Docs_zh/
+│       ├── README_zh.md
+│       ├── SETUP_zh.md
+│       └── SPEC_zh.md
+├── .github/                            # GitHub Actions CI
+│   └── workflows/
+│       ├── lint.yml
+│       ├── dbt_compile.yml
+│       └── terraform_validate.yml
 ├── Makefile
-├── .env.example
+├── pyproject.toml
+├── uv.lock
 ├── .gitignore
+├── .env.example
+├── .env
+├── LICENSE
 └── README.md
+```
 
 ### Makefile Targets
 
 | Target | Command | Description |
 |---|---|---|
-| `make up` | `docker compose up -d` | Start all services |
-| `make down` | `docker compose down` | Stop all services |
-| `make build` | `docker compose build` | Build custom Airflow image |
-| `make backfill` | Trigger DAG via Airflow CLI with catchup | Run initial backfill |
-| `make dbt-build` | `dbt build` inside container | Run dbt build |
-| `make dbt-docs` | `dbt docs generate` inside container | Generate dbt docs |
-| `make dbt-deps` | `dbt deps` inside container | Install dbt packages |
+| `make up` | `docker compose -f docker/docker-compose.yml up -d` | Start all services |
+| `make down` | `docker compose -f docker/docker-compose.yml down` | Stop all services |
+| `make build` | `docker compose -f docker/docker-compose.yml build` | Build the custom Airflow and Serving images |
+| `make backfill` | `docker compose exec airflow-webserver airflow dags backfill eia_grid_batch` | Run a backfill over an explicit start / end window |
+| `make dbt-build` | Run `dbt deps` + `dbt build` inside the Airflow container | Execute the dbt build |
+| `make dbt-docs` | Run `dbt docs generate` inside the Airflow container | Generate dbt docs |
+| `make dbt-deps` | Run `dbt deps` inside the Airflow container | Install dbt packages |
 | `make lint` | `sqlfluff lint` + `ruff check` | Lint SQL and Python |
 | `make terraform-init` | `terraform init` | Initialize Terraform |
-| `make terraform-apply` | `terraform apply` | Provision GCP resources |
-| `make terraform-destroy` | `terraform destroy` | Tear down GCP resources |
-| `make clean` | Remove local artifacts, logs, temp | Clean up |
+| `make terraform-apply` | `terraform apply -var-file=terraform.tfvars` | Provision GCP resources |
+| `make terraform-destroy` | `terraform destroy -var-file=terraform.tfvars` | Tear down GCP resources |
+| `make clean` | Remove `dbt/target`, `dbt/dbt_packages`, `.pytest_cache`, `.ruff_cache` | Clean local artifacts |
 
 ---
 
@@ -584,9 +636,11 @@ Core fields:
 - `observation_date` — DATE, derived from `observation_timestamp`
 - `metric_name` — standardized metric type (from `type` / `type_name`)
 - `metric_value` — FLOAT64 (from `value`)
-- `energy_source` (nullable) — standardized fuel type (from `fueltype`); allowed Voltage Hub codes: `BAT`, `BIO`, `COL`, `GEO`, `HPS`, `HYC`, `NG`, `NUC`, `OES`, `OIL`, `OTH`, `PS`, `SNB`, `SUN`, `UES`, `UNK`, `WAT`, `WNB`, `WND`
+- `energy_source` (nullable) — standardized fuel type (from `fueltype`)
 - `unit` — standardized unit (from `value_units`)
 - `_ingestion_timestamp` — passed through from raw
+
+Allowed `metric_name` values include `demand`, `day_ahead_demand_forecast`, `net_generation`, `total_interchange`, and `generation`.
 
 **Partitioning:** `observation_date`
 **Clustering:** `region`, `metric_name`
@@ -595,25 +649,20 @@ Core fields:
 
 #### Core Models
 
-- **`marts.fct_grid_metrics`** — one row per observation (region × timestamp × metric × source). Partitioned by `observation_date`, clustered by `region`, `metric_name`.
-- **`marts.dim_region`** — unique regions / balancing areas with `region` (PK), `region_name`.
-- **`marts.dim_energy_source`** — unique energy sources / fuel types with `energy_source` (PK), optional category grouping.
+- **`marts.fct_grid_metrics`** — one row per observation (region × timestamp × metric × source). Partitioned by `observation_date`, clustered by `region`, `metric_name`
+- **`marts.dim_region`** — region / balancing-area dimension with `region` (PK) and `region_name`
+- **`marts.dim_energy_source`** — energy / fuel dimension with `energy_source` (PK)
 
 #### Aggregate Models
 
 Aggregates are consumption-layer summaries built from mart-level data. They are not tied to source granularity.
 
-- **`marts.agg_load_hourly`** — hourly load/demand metrics by region
-- **`marts.agg_load_daily`** — daily load summaries by region (avg, min, max, total)
-- **`marts.agg_generation_mix`** — generation breakdown by energy source. Default grain: **region × observation_date × energy_source**. This is the standard consumption granularity for the serving API. Broader time-window aggregations (weekly, monthly) are left to the API query layer or upstream consumer.
-- **`marts.agg_top_regions`** — daily ranked regions by demand. Default grain: **observation_date × region**, ranked by daily total load. Each row contains:
-  - `observation_date` (DATE)
-  - `region` (STRING)
-  - `region_name` (STRING)
-  - `daily_total_load` (FLOAT64) — sum of load for the region on that date
-  - `rank` (INT64) — rank within the `observation_date` (1 = highest load)
+- **`marts.agg_load_hourly`** — hourly load / demand metrics by region, with fields including `region`, `region_name`, `observation_timestamp`, `observation_date`, `hourly_load`, and `unit`
+- **`marts.agg_load_daily`** — daily load summaries by region, with fields including `region`, `region_name`, `observation_date`, `avg_load`, `min_load`, `max_load`, `total_load`, and `unit`
+- **`marts.agg_generation_mix`** — daily generation mix by region, date, and energy source. Default grain: **region × observation_date × energy_source**; fields include `daily_total_generation` and `unit`
+- **`marts.agg_top_regions`** — daily region demand ranking. Default grain: **observation_date × region** with fields `observation_date`, `region`, `region_name`, `daily_total_load`, and `rank`
 
-  The serving API consumes this table directly for "top N per day" queries over a date range. The `limit` parameter in the API applies per `observation_date`, not across the entire range.
+`marts.agg_top_regions` uses standard `rank()` semantics: tied values share the same rank, and the next rank is skipped. The Serving API `limit` applies separately within each `observation_date`, so it returns "top N regions per day," not a single top N list across the full range.
 
 These aggregates are the primary data sources for the serving API.
 
@@ -628,6 +677,9 @@ These aggregates are the primary data sources for the serving API.
 
 The meta layer is a **first-class consumer-facing dataset**: the serving API reads freshness, pipeline status, and anomaly summaries from these tables and exposes them through dedicated endpoints.
 The meta tables are operational control-plane tables owned by Airflow tasks. If one does not exist yet, the Airflow Python task that writes to it creates it on demand before inserting or updating records. They are documented in dbt for schema consistency, but they are not materialized by dbt models.
+
+`meta.pipeline_state` records `pipeline_name`, `last_successful_window_start`, `last_successful_window_end`, `last_successful_run_id`, and `updated_at`.
+`meta.run_metrics` records `run_id`, `dag_id`, `execution_date`, `window_start`, `window_end`, `rows_loaded`, `dbt_models_passed`, `dbt_tests_passed`, `dbt_tests_failed`, `bytes_processed`, `duration_seconds`, `status`, and `created_at`.
 
 ### 10.6 Partitioning and Clustering Rationale
 - Tables partitioned by date because queries overwhelmingly filter by time range
@@ -647,7 +699,7 @@ packages:
 ```
 
 ### dbt Layers
-- **`staging/`** — Canonicalization: type casting, field normalization, surrogate key generation. Transforms raw source records into the canonical `stg_grid_metrics` table via partition-level idempotent rebuild.
+- **`staging/`** — Canonicalization: type casting, field normalization, and surrogate key generation
 - **`marts/core/`** — Fact and dimension models
 - **`marts/aggregates/`** — Consumption-layer summaries at various time granularities
 - **`meta/`** — Pipeline metadata schema definitions
@@ -665,10 +717,11 @@ packages:
 | `agg_generation_mix` | `table` | full rebuild | — |
 | `agg_top_regions` | `table` | full rebuild | — |
 
-All incremental models use `insert_overwrite`, scoped to the affected `observation_date` set determined during each DAG run (see Section 9 Partition Rebuild Rules). This ensures each run only touches the partitions it needs to.
+In this design, `stg_grid_metrics` uses an `insert_overwrite` incremental model partitioned by `observation_date`; `fct_grid_metrics` and the two dimension tables remain incremental models, while the aggregate tables are rebuilt in full. The Serving API never queries `raw` or `staging` directly and instead reads from these precomputed outputs.
 
 ### dbt Requirements
 - `sources.yml` defining `raw.eia_grid_batch` as the source
+- The `raw` source must use `loaded_at_field: _ingestion_timestamp`, with `warn_after=6h` and `error_after=12h`
 - `schema.yml` with descriptions and tests for every model
 - Docs generation with `dbt docs generate`
 
@@ -837,20 +890,40 @@ update_pipeline_state           [update meta.pipeline_state watermark]
 ## 14. Serving Layer Design
 
 ### Functional Scope
-The serving layer exposes a **set of fixed-template analytical endpoints**. The serving layer is a **thin, read-only query façade** with predefined query templates — it is explicitly **not** a general-purpose analytics query surface.
+The serving layer exposes a **set of fixed-template analytical capabilities**, including:
+- a **REST API** for programmatic consumers
+- a **stdio MCP server** (Tools + Resources) for LLM agents
 
-**Data scope constraint:** The serving layer reads **only** from pre-built aggregate tables (`marts.agg_*`) and meta tables (`meta.*`). It does **not** query large fact tables (`fct_grid_metrics`) or perform runtime aggregation. All heavy computation is done by dbt at build time; the serving layer simply retrieves and filters pre-computed results.
+It is a **thin, read-only query façade** backed by predefined query templates. It is explicitly **not** a general-purpose analytics query surface.
 
-**Metric endpoints (fixed query templates):**
+**Data scope constraint:** The serving layer reads **only** from pre-built aggregate tables (`marts.agg_*`), serving-safe dimensions (`marts.dim_region`, `marts.dim_energy_source`, used only for schema resources and normalization), and meta tables (`meta.*`). It does **not** query large fact tables (`fct_grid_metrics`) or perform heavy runtime aggregation. All heavy computation is done by dbt at build time; the serving layer is limited to retrieval, filtering, and light consumer-side derivation.
+
+**Metric capabilities (fixed query templates):**
 - Load metrics by region and time granularity → reads `marts.agg_load_hourly` / `marts.agg_load_daily`
 - Generation mix by energy source for a given region / time range → reads `marts.agg_generation_mix`
-- Top regions by total demand → reads marts.agg_top_regions
+- Top-demand regions over a given date range → reads `marts.agg_top_regions`
 
 **Control plane endpoints:**
 - `/health` — service health check (service-level, no BigQuery dependency)
 - `/freshness` — pipeline freshness + data freshness → reads `meta.freshness_log`
 - `/pipeline/status` — latest successful sync window, pipeline state → reads `meta.pipeline_state`
 - `/anomalies` — recent anomaly summary → reads `meta.anomaly_results`
+
+**MCP tool capabilities:**
+- `get_load_trends` — query load trends for a region and time range
+- `get_generation_mix` — query generation mix for a region and time range; if percentages are enabled, they are derived only within the same `observation_date` and `region`
+- `get_top_demand_regions` — query **daily** top-demand region rankings rather than a single range-wide total ranking
+- `check_data_freshness` — retrieve the latest freshness state
+- `get_anomalies` — retrieve anomaly-detection results
+- `get_pipeline_status` — retrieve the most recent successful pipeline status
+
+**MCP resource capabilities:**
+- `schema://grid-metrics` — exposes available metrics, time granularities, time range, and tool guidance
+- `status://data-quality` — exposes current freshness, pipeline status, and anomaly summary
+- `schema://regions` — in v1, exposes `region` and `region_name`; aliases are not part of the contract
+- `schema://energy-sources` — in v1, exposes normalized `energy_source`; richer semantic fields are outside the v1 contract
+
+> **MCP spec precedence:** This section defines the system-level positioning and boundaries of MCP only. Detailed Tool / Resource contracts, parameter names, defaults, truncation rules, derived fields, error semantics, and resource structure are governed by [`MCP.md`](MCP.md).
 
 > **Note:** `meta.run_metrics` contains internal pipeline telemetry (rows loaded, bytes processed, duration). It is available for operational debugging but is not exposed as a public API endpoint.
 
@@ -860,6 +933,15 @@ Every data endpoint response includes metadata fields:
 - `pipeline_run_id` — identifier of the latest successful pipeline run (from `meta.pipeline_state.last_successful_run_id`)
 - `freshness_status` — combined status: `fresh` | `stale` | `unknown` (derived from the worse of `pipeline_freshness_status` and `data_freshness_status` in `meta.freshness_log`)
 
+MCP tool responses preserve the same metadata semantics and additionally follow these requirements:
+- Results should default to an LLM-friendly structure with `summary`, `highlights`, `data`, and `metadata`
+- `summary` captures the main conclusion of the tool call
+- `highlights` provide a small set of high-signal takeaways to reduce extra model-side summarization
+- `data` preserves the structured underlying result
+- `metadata` carries `data_as_of`, `pipeline_run_id`, and `freshness_status`, and may include MCP-specific safety fields
+- The MCP adapter layer may add agent-oriented safety semantics such as truncation flags, defaults, normalization, and deterministic summaries, but it must not change the underlying metric definitions
+- Error categories should stay aligned with serving semantics, while MCP may add agent-facing boundary errors such as `unsupported_capability`
+
 ### Constraints
 - **Fixed-template endpoints only** — each endpoint maps to a predefined query against specific `agg_*` or `meta.*` tables
 - **No fact table queries** — the serving layer never reads `fct_grid_metrics` directly; all metrics are served from pre-aggregated tables
@@ -868,9 +950,13 @@ Every data endpoint response includes metadata fields:
 - **No user-defined filters beyond predefined parameters** (region, time range, granularity)
 - **Read-only** against BigQuery
 - **Optional simple TTL cache** for hot aggregate queries (in-memory only, no Redis)
-- **Request-level logging** for observability
+- **Request-level logging and MCP tool-call logging** for observability
 - **No data processing** — all transformation happens in the ELT layer
 - **No microservice splitting** — single deployable service
+- **MCP supports `stdio` transport only** — no HTTP / SSE mode
+- **MCP tools must be LLM-friendly** — descriptions should explain when to use the tool, and parameter names should favor human-readable fields and enums over internal codes
+- **The v1 MCP resource contract cannot exceed the real dimension schemas** — `schema://regions` cannot assume aliases, and `schema://energy-sources` cannot assume labels, descriptions, or categories
+- **Over-limit behavior must be tool-specific** — `get_load_trends`, `get_generation_mix`, and `get_top_demand_regions` should be validation-first, while `get_anomalies` may use explicit truncation
 
 > **Future upgrade path:** If BigQuery query latency or cost becomes a concern at scale, a PostgreSQL-based serving store can be introduced as a materialized read replica of the aggregate and meta tables. This is not part of the current design scope.
 
@@ -937,6 +1023,88 @@ PORT=8090  # optional, default 8090
 
 ---
 
+### 14.3 stdio MCP Server
+
+The MCP server runs as a standalone process and communicates with LLM agents over **stdio transport**. Like the REST serving API, it shares the same `.env`, GCP credentials, and core query logic, but its interface surface is agent-oriented Tools and Resources rather than HTTP endpoints.
+
+> **Spec precedence:** This section describes MCP responsibilities, boundaries, and deployment shape within the overall architecture. Detailed MCP response envelopes, parameter translation, resource structure, over-limit behavior, time semantics, normalization rules, and error semantics are governed by [`MCP.md`](MCP.md).
+
+**Design goals:**
+- Let agents access fixed analytical capabilities safely, without exposing arbitrary query power
+- Reuse the Serving Layer's core query logic, validation rules, and freshness semantics
+- Provide context through Resources before query execution through Tools
+- Return structured results that are easier for LLMs to consume than raw row sets alone
+
+**Recommended implementation approach (v1):**
+- The v1 MCP server should be implemented in **Python 3.11+**
+- It should live as a dedicated Python package under `mcp/`
+- It should reuse the same repository / service layer contracts as the FastAPI serving implementation, rather than introducing a separate query stack
+- It should support both a clean local developer workflow and a package-first distribution model for agent hosts
+
+**Recommended runtime / invocation model (v1):**
+- For local development, the MCP server should be started with **`uv run`**
+- A typical local command shape is `cd mcp && uv run voltagehub-mcp`, or an equivalent package entrypoint defined in `pyproject.toml`
+- For agent-host integration, the preferred delivery model is a published **`uvx` package**
+- A typical host-side startup shape is `uvx voltagehub-mcp`
+- In this model, the agent host executes the configured `uvx` command to launch the MCP process over `stdio`; the model then calls the exposed Tools / Resources
+
+**Transport constraints:**
+- Supports **`stdio` only**
+- Exposes no additional network port
+- Does not support HTTP / SSE MCP transports
+
+**Tool list:**
+
+| Tool | Purpose | Corresponding REST capability |
+|---|---|---|
+| `get_load_trends` | Query load trends for a given region, time range, and granularity; useful for questions like "how did load change in this region?" | `/metrics/load` |
+| `get_generation_mix` | Query generation mix for a region and time range; when percentages are enabled, only returns share-derived fields within the same day and region | `/metrics/generation-mix` |
+| `get_top_demand_regions` | Query daily top-demand region rankings over a time range; not a single cumulative ranking for the whole interval | `/metrics/top-regions` |
+| `check_data_freshness` | Query the latest data freshness state; useful before analysis or to answer "is the data current?" | `/freshness` |
+| `get_anomalies` | Query anomaly-detection results; useful for questions like "have there been any notable anomalies recently?" | `/anomalies` |
+| `get_pipeline_status` | Query the most recent successful pipeline status; useful for questions like "how far did the latest successful run get?" | `/pipeline/status` |
+
+**Tool description requirements:**
+- Each Tool description must clearly explain when the tool should be used
+- Descriptions should clarify the boundary between neighboring Tools to reduce mis-selection
+- Descriptions should avoid implementation-only phrasing such as "query this table" or "return this field"
+
+**Parameter design requirements:**
+- Parameter names must be natural-language-friendly, such as `region`, `start_date`, `end_date`, `time_granularity`, `top_n`, and `anomaly_only`
+- Enum values should use human-readable forms such as `daily`, `hourly`, `fresh`, and `stale`
+- BigQuery table names, column names, and internal codes must not be exposed directly as interface parameters
+- In v1, `region` must at least support canonical region codes and may support exact, case-insensitive normalization of `region_name`; alias matching is not part of the v1 contract
+
+**Tool response requirements:**
+- Default response shape: `summary`, `highlights`, `data`, `metadata`
+- `summary` should state the main conclusion of the query
+- `highlights` should extract the points most worth citing downstream
+- `data` should preserve the structured details rather than returning text-only summaries
+- `metadata` must retain `data_as_of`, `pipeline_run_id`, and `freshness_status`
+- Any lightweight derived fields should be included explicitly as structured fields rather than appearing only in prose; for example, generation-mix percentages should appear as row-level derived fields
+
+**Resource list:**
+
+| Resource | Purpose |
+|---|---|
+| `schema://grid-metrics` | Exposes available tools, supported metric types, time granularities, and queryable date range |
+| `status://data-quality` | Exposes current data-quality status, freshness state, pipeline status, and anomaly summary; the anomaly summary window should be anchored to the latest available `observation_date` in `meta.anomaly_results` |
+| `schema://regions` | In v1, exposes `region` and `region_name` so agents can choose valid regions before calling a Tool |
+| `schema://energy-sources` | In v1, exposes normalized `energy_source` values so agents can interpret generation-mix results |
+
+**Resource design requirements:**
+- Resources exist to provide pre-query context for Tool calls
+- Agents should be able to learn available data ranges, valid parameter values, and current data state from Resources
+- Resources should prioritize low-cardinality, stable, cacheable information over large time-series payloads
+
+**Relationship to the Serving API:**
+- The MCP server and REST API share the same data sources: `marts.agg_*`, serving-safe dimensions, and `meta.*`
+- The MCP server and REST API should reuse the same core business validation and freshness semantics
+- The MCP server should not call the REST API over HTTP; it should share the lower-level query logic directly
+- The MCP server may add `summary`, `highlights`, truncation flags, normalization, and other agent-friendly wrappers in an adapter layer, but it must not change the underlying metric definitions
+
+---
+
 ## 15. Observability and Run Metrics
 
 ### Run Metrics Table
@@ -967,30 +1135,17 @@ The `dbt_models_passed`, `dbt_tests_passed`, `dbt_tests_failed`, and `bytes_proc
 
 | Workflow | Trigger | Steps |
 |---|---|---|
-| `lint.yml` | Push / PR | `sqlfluff lint` on dbt SQL, `ruff` on Python |
-| `dbt_compile.yml` | Push / PR | `dbt deps && dbt parse --target ci --no-populate-cache` |
-| `terraform_validate.yml` | Push / PR to `terraform/` | `terraform fmt -check`, `terraform validate` |
+| `lint.yml` | Push / PR | `uv sync --all-groups --frozen`, `uv sync --dev --frozen`, `ruff check .`, `pytest`, `sqlfluff lint` |
+| `dbt_compile.yml` | Push / PR | Create a placeholder service-account file, install dbt dependencies, run `dbt deps`, then run offline `dbt parse --target ci --no-populate-cache` |
+| `terraform_validate.yml` | Push / PR, limited to `terraform/**` changes | `terraform fmt -check -recursive`, `terraform init -backend=false`, `terraform validate` |
 
-### CI dbt Profile
+### CI Design Principles
 
-```yaml
-voltage_hub:
-  target: dev
-  outputs:
-    dev:
-      type: bigquery
-      method: service-account
-      project: "{{ env_var('GCP_PROJECT_ID') }}"
-      dataset: "{{ env_var('BQ_DATASET_STAGING', 'staging') }}"
-      keyfile: "{{ env_var('GCP_SERVICE_ACCOUNT_KEY_PATH') }}"
-      threads: 4
-    ci:
-      type: bigquery
-      method: oauth
-      project: "ci-placeholder"
-      dataset: "ci_placeholder"
-      threads: 1
-```
+- CI remains offline and does not connect to real GCP resources
+- `lint.yml` covers style checks, unit tests, and static SQL validation
+- `dbt_compile.yml` covers offline syntax and structural validation for the dbt project
+- `terraform_validate.yml` covers formatting and semantic validation for infrastructure configuration
+- The `ci` target in `dbt/profiles.yml` exists specifically for offline parsing
 
 CI validates syntax and code quality only — it does not connect to GCP or execute queries. For the BigQuery adapter, the CI dbt workflow uses offline `dbt parse` rather than `dbt compile` because `compile` may populate adapter caches and trigger warehouse introspection.
 
@@ -1023,12 +1178,16 @@ The following dimensions must be verified during development. Each is objectivel
 - `dbt source freshness` reports `pass` or `warn`
 - `meta.anomaly_results` is populated after runs
 
-### Serving API
+### Serving Interfaces
 - Health endpoint responds `200`
 - Freshness endpoint returns latest data timestamp and status
 - Pipeline status endpoint returns latest run info
 - Metric endpoints return valid, schema-conformant responses
 - Responses include `data_as_of`, `pipeline_run_id`, and `freshness_status` metadata
+- The MCP server starts in `stdio` mode and exposes the expected Tools / Resources
+- MCP Tool calls return valid responses that conform to the agreed structure
+- MCP Tool responses include `summary`, `highlights`, `data`, and `metadata`
+- All MCP Tool tests pass
 
 ### CI
 - All CI workflows pass on clean PRs
