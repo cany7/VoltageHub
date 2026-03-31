@@ -77,3 +77,5 @@ dbt/.user.yml
 # Local Secrets & Project specific
 keys/*.json
 *.txt
+
+/*.md
