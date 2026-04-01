@@ -197,14 +197,14 @@ This project is built with the following tools and frameworks:
 - [dbt Core](https://www.getdbt.com/) and [dbt-bigquery](https://docs.getdbt.com/docs/core/connect-data-platform/bigquery-setup): Warehouse transformations, tests, freshness checks, and documentation.
 - [Docker](https://www.docker.com/) and [Docker Compose](https://docs.docker.com/compose/): Local development environment for Airflow and supporting services.
 - [FastAPI](https://fastapi.tiangolo.com/): Serving layer for analytical and operational endpoints.
-- [Uvicorn](https://www.uvicorn.org/): ASGI server used to run the FastAPI service locally and in development workflows.
-- [Model Context Protocol (MCP)](https://modelcontextprotocol.io/): stdio interface for LLM agents over curated analytical tools and resources.
 - [GitHub Actions](https://github.com/features/actions): CI/CD for linting, dbt validation, and Terraform checks.
 - [Google Cloud Storage (GCS)](https://cloud.google.com/storage): Raw landing zone for replayable and auditable batch files.
+- [Model Context Protocol (MCP)](https://modelcontextprotocol.io/): stdio interface for LLM agents over curated analytical tools and resources.
 - [Pydantic](https://docs.pydantic.dev/): Request and response validation for the API layer.
 - [Requests](https://requests.readthedocs.io/): HTTP client used by Airflow ingestion tasks to call upstream EIA APIs.
 - [ruff](https://docs.astral.sh/ruff/) and [sqlfluff](https://docs.sqlfluff.com/): Python and SQL linting.
 - [Terraform](https://www.terraform.io/): Infrastructure as code for GCP resources and IAM configuration.
+- [Uvicorn](https://www.uvicorn.org/): ASGI server used to run the FastAPI service locally and in development workflows.
 - [uv](https://docs.astral.sh/uv/): Python dependency management and local command execution.
 
 ## License

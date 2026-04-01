@@ -117,12 +117,13 @@ Set `MCP_GCP_PROJECT_ID` and `MCP_GOOGLE_APPLICATION_CREDENTIALS` either in `.en
 
 ### 8.1 Test Paths Overview
 
-The project has seven test paths, controlled by environment variables:
+The project has eight test paths, controlled by environment variables where applicable:
 
 | Path | Scope | When to Use | Connects to GCP? |
 |---|---|---|---|
 | **Unit Tests** | Extraction, loading, freshness, anomaly logic; Serving API routes and services | After every change | No |
 | **CI** | Ruff + SQLFluff + unit tests + dbt parse + Terraform validate | Automatic on push / PR | No |
+| **MCP Tests** | MCP settings, adapter contracts, server registration, stdio E2E behavior | After MCP-related changes | No |
 | **Sample Mode** | Writes pipeline output to isolated `*_sample` datasets | Lightweight validation without affecting primary datasets | Yes |
 | **E2E Smoke** | Single-window pipeline run → GCS → BigQuery → dbt → marts → meta; UTC date-boundary scenario | After pipeline-related changes | Yes |
 | **E2E Heavy** | Idempotent rerun + multi-window backfill | Before milestone verification | Yes |
@@ -143,13 +144,23 @@ Three GitHub Actions workflows run automatically on push and PR:
 
 | Workflow | What It Checks |
 |---|---|
-| **Lint** | Ruff + SQLFluff + pipeline unit tests + serving API unit tests |
+| **Lint** | Ruff + SQLFluff + pipeline unit tests + serving API unit tests + MCP tests |
 | **dbt Parse** | `dbt deps` + `dbt parse --target ci` (offline, no GCP) |
 | **Terraform Validate** | `terraform fmt -check` + `terraform validate` |
 
 CI never connects to GCP. All checks are syntax and structural validation only.
 
-### 8.4 Sample Mode
+### 8.4 MCP Tests
+
+```bash
+cd mcp
+uv sync --dev
+uv run pytest -q tests
+```
+
+Covers MCP-specific settings loading, adapter contracts, documented tool and resource registration, and stdio end-to-end behavior. These tests run locally with stubs and do not require GCP access.
+
+### 8.5 Sample Mode
 
 Sample mode redirects pipeline writes to isolated `*_sample` BigQuery datasets, letting you validate changes without affecting the primary warehouse.
 
@@ -167,7 +178,7 @@ When enabled:
 
 Sample mode still uses the same GCS bucket and raw landing path. Isolation applies only to BigQuery datasets.
 
-### 8.5 E2E Tests
+### 8.6 E2E Tests
 
 All three E2E paths live in `tests/integration/test_pipeline_e2e.py` and are enabled through environment variables.
 
@@ -215,7 +226,7 @@ Creates isolated temporary BigQuery datasets, modifies `_ingestion_timestamp` to
 2. Milestone check → E2E heavy
 3. Failure handling validation → E2E failure-path (can run independently)
 
-### 8.6 Serving API Integration Tests
+### 8.7 Serving API Integration Tests
 
 ```bash
 set -a; source .env; set +a

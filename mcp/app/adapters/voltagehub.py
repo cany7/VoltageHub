@@ -10,19 +10,15 @@ from pydantic import BaseModel
 from app.config.runtime import Runtime
 from voltage_hub_core.exceptions import (
     AppError,
-    RepositoryError,
-    UnsupportedCapabilityError,
     ValidationAppError,
 )
 from voltage_hub_core.schemas import (
     AnomalyRecord,
-    EnergySourceRecord,
     GenerationMixRecord,
     FreshnessResponse,
     LoadMetricDailyRecord,
     LoadMetricHourlyRecord,
     PipelineStatusResponse,
-    RegionRecord,
     TopRegionsRecord,
 )
 
@@ -660,7 +656,7 @@ class VoltageHubMCPAdapter:
         if not rows:
             return ["No anomaly rows matched the requested filters."]
         highlights = [
-            f"Rows are ordered by observation_date desc, checked_at desc, region asc, metric_name asc.",
+            "Rows are ordered by observation_date desc, checked_at desc, region asc, metric_name asc.",
             f"Flagged rows in this response: {sum(1 for row in rows if row.anomaly_flag)}.",
         ]
         if truncated:

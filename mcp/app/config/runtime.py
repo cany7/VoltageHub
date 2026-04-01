@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from voltage_hub_core.bigquery import get_bigquery_client
-from voltage_hub_core.cache import QueryCache, get_query_cache
+from voltage_hub_core.cache import QueryCache
 from voltage_hub_core.repositories import (
     ControlPlaneRepository,
     DimensionRepository,

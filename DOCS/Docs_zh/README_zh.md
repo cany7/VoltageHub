@@ -197,15 +197,15 @@ uv run voltagehub-mcp
 - [dbt Core](https://www.getdbt.com/) 与 [dbt-bigquery](https://docs.getdbt.com/docs/core/connect-data-platform/bigquery-setup)：数据仓库转换、测试、新鲜度检查及文档生成。
 - [Docker](https://www.docker.com/) 与 [Docker Compose](https://docs.docker.com/compose/)：Airflow 及其支持服务的本地开发环境。
 - [FastAPI](https://fastapi.tiangolo.com/)：分析与运维接口的 API 服务层。
-- [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)：面向 LLM Agent 的 `stdio` 工具与资源接口。
 - [GitHub Actions](https://github.com/features/actions)：代码风格检查、dbt 验证和 Terraform 检查的 CI/CD 流水线。
 - [Google Cloud Storage (GCS)](https://cloud.google.com/storage)：原始批次数据的落盘区，支持重放和审计。
+- [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)：面向 LLM Agent 的 `stdio` 工具与资源接口。
 - [Pydantic](https://docs.pydantic.dev/)：API 层请求与响应的数据校验。
 - [Requests](https://requests.readthedocs.io/)：Airflow 摄取任务中调用 EIA 上游接口的 HTTP 客户端。
 - [ruff](https://docs.astral.sh/ruff/) 与 [sqlfluff](https://docs.sqlfluff.com/)：Python 和 SQL 的代码风格检查。
 - [Terraform](https://www.terraform.io/)：GCP 资源和 IAM 配置的基础设施即代码 (IaC)。
-- [uv](https://docs.astral.sh/uv/)：Python 依赖管理与本地命令执行。
 - [Uvicorn](https://www.uvicorn.org/)：FastAPI 服务在本地开发和运行时使用的 ASGI Server。
+- [uv](https://docs.astral.sh/uv/)：Python 依赖管理与本地命令执行。
 
 ## 开源协议
 

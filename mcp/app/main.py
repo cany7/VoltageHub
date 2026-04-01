@@ -17,8 +17,8 @@ def _prefer_workspace_core() -> None:
 
 _prefer_workspace_core()
 
-from app.adapters.voltagehub import VoltageHubMCPAdapter, resource_specs, tool_specs
-from app.config.runtime import create_runtime
+from app.adapters.voltagehub import VoltageHubMCPAdapter, resource_specs, tool_specs  # noqa: E402
+from app.config.runtime import create_runtime  # noqa: E402
 
 
 def create_server():

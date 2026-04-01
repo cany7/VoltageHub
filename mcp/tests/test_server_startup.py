@@ -10,7 +10,6 @@ from voltage_hub_core.schemas import (
     FreshnessResponse,
     PipelineStatusResponse,
     RegionRecord,
-    ResponseMetadata,
 )
 
 

@@ -118,12 +118,13 @@ MCP 配置示例：
 
 ### 8.1 测试路径总览
 
-项目包含七条测试路径，通过环境变量切换：
+项目包含八条测试路径；其中部分路径通过环境变量切换：
 
 | 路径 | 范围 | 适用场景 | 是否连接 GCP |
 |---|---|---|---|
 | **Unit Tests** | 抽取、加载、freshness、anomaly 逻辑；Serving API 路由和服务层 | 每次改动后 | 否 |
 | **CI** | Ruff + SQLFluff + Unit Tests + dbt parse + Terraform validate | push / PR 时自动运行 | 否 |
+| **MCP Tests** | MCP 配置读取、adapter 契约、server 注册、stdio 端到端行为 | MCP 相关改动后 | 否 |
 | **Sample Mode** | 将 pipeline 输出写入隔离的 `*_sample` 数据集 | 轻量验证且不影响主数据集 | 是 |
 | **E2E Smoke** | 单窗口 pipeline 全链路：GCS → BigQuery → dbt → marts → meta；跨 UTC 午夜日期边界场景 | pipeline 相关改动后 | 是 |
 | **E2E Heavy** | 幂等重跑 + 多窗口 backfill 验证 | 阶段性验收前 | 是 |
@@ -144,13 +145,23 @@ uv run pytest tests/unit
 
 | Workflow | 检查内容 |
 |---|---|
-| **Lint** | Ruff + SQLFluff + pipeline unit tests + Serving API unit tests |
+| **Lint** | Ruff + SQLFluff + pipeline unit tests + Serving API unit tests + MCP tests |
 | **dbt Parse** | `dbt deps` + `dbt parse --target ci`（离线解析，不连接 GCP） |
 | **Terraform Validate** | `terraform fmt -check` + `terraform validate` |
 
 CI 不连接 GCP，仅做语法和结构校验。
 
-### 8.4 Sample Mode
+### 8.4 MCP Tests
+
+```bash
+cd mcp
+uv sync --dev
+uv run pytest -q tests
+```
+
+覆盖 MCP 专用配置读取、adapter 契约、文档中定义的 tool / resource 注册，以及 stdio 端到端行为。这些测试使用本地 stub 运行，不需要连接 GCP。
+
+### 8.5 Sample Mode
 
 Sample Mode 会将 pipeline 的写入重定向到隔离的 `*_sample` BigQuery 数据集，方便进行轻量验证而不影响主数据仓库。
 
@@ -168,7 +179,7 @@ SAMPLE_MODE=true
 
 Sample Mode 仍使用相同的 GCS bucket 与 raw 落盘路径，隔离范围仅限 BigQuery 数据集。
 
-### 8.5 E2E Tests
+### 8.6 E2E Tests
 
 三条 E2E 路径均位于 `tests/integration/test_pipeline_e2e.py`，通过环境变量启用。
 
@@ -216,7 +227,7 @@ VOLTAGE_HUB_RUN_FAILURE_PATH_PIPELINE_TESTS=1 \
 2. 阶段验收 → E2E heavy
 3. 故障路径验证 → E2E failure-path（可独立运行）
 
-### 8.6 Serving API Integration Tests
+### 8.7 Serving API Integration Tests
 
 ```bash
 set -a; source .env; set +a
