@@ -3,29 +3,30 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "voltage-hub-serving-fastapi"
+name = "voltagehub-mcp"
 version = "0.1.0"
-description = "Voltage Hub serving API"
+description = "Voltage Hub MCP stdio server"
 requires-python = ">=3.11"
 dependencies = [
     "cachetools>=5.5.2",
-    "fastapi>=0.115.12",
     "google-cloud-bigquery>=3.40.1",
+    "mcp>=1.12.0",
     "pydantic>=2.11.3",
-    "uvicorn>=0.34.0",
 ]
 
-[dependency-groups]
-dev = [
-    "httpx>=0.28.1",
-    "pytest>=8.3.5",
-]
+[project.scripts]
+voltagehub-mcp = "app.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "../voltage_hub_core" = "voltage_hub_core"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
 
 [tool.pytest.ini_options]
 pythonpath = [".", ".."]

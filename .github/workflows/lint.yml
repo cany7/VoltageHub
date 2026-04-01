@@ -26,6 +26,10 @@ jobs:
         working-directory: serving-fastapi
         run: uv sync --dev --frozen
 
+      - name: Sync MCP dependencies
+        working-directory: mcp
+        run: uv sync --dev --frozen
+
       - name: Run Ruff
         run: uv run ruff check .
 
@@ -35,6 +39,10 @@ jobs:
       - name: Run serving API unit tests
         working-directory: serving-fastapi
         run: uv run pytest -q ../tests/unit/serving_fastapi
+
+      - name: Run MCP tests
+        working-directory: mcp
+        run: uv run pytest -q tests
 
       - name: Run SQLFluff
         run: uv run sqlfluff lint --config sqlfluff_libs/.sqlfluff.ci dbt/models

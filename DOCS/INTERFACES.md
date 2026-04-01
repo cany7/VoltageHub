@@ -215,6 +215,7 @@ Error categories:
 Normalization and scope notes:
 - region normalization supports canonical `region` and exact case-insensitive `region_name`
 - aliases are out of scope for v1
+- in v1, `unsupported_capability` is retained as a stable error category, but current documented tool schemas may not provide a direct parameter-level trigger for every unsupported analytical intent described in prose
 - detailed MCP defaults, limits, truncation behavior, and normalization rules defer to `DOCS/MCP.md`
 
 ---

@@ -1,5 +1,3 @@
-from __future__ import annotations
+from voltage_hub_core.schemas import FreshnessStatus
 
-from typing import Literal
-
-FreshnessStatus = Literal["fresh", "stale", "unknown"]
+__all__ = ["FreshnessStatus"]

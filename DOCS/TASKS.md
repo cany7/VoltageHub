@@ -253,7 +253,7 @@ Development follows the order prescribed by the SPEC (Section 19). Each phase un
 - [ ] Keep `schema://regions` v1 limited to `region` and `region_name`
 - [ ] Keep `schema://energy-sources` v1 limited to canonical `energy_source`
 - [ ] Implement MCP response shaping with `summary`, `highlights`, `data`, and `metadata`
-- [ ] Implement MCP-specific validation, overflow, and error behavior, including `unsupported_capability`
+- [ ] Implement MCP-specific validation, overflow, and error behavior; keep `unsupported_capability` as a reserved v1 error category aligned with `DOCS/MCP.md`
 - [ ] Add MCP tool/resource tests covering registration, validation, response envelopes, resource payloads, normalization, empty results, and overflow behavior
 - [ ] Do not add agent usability tests or remote transport support in this phase
 - [ ] Ensure the package can be launched locally with `uv run voltagehub-mcp`

@@ -6,6 +6,8 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SERVING_ROOT = PROJECT_ROOT / "serving-fastapi"
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 if str(SERVING_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVING_ROOT))
 

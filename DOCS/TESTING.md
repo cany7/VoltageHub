@@ -191,7 +191,6 @@ Prioritized by blast radius and likelihood of failure:
 | Meta tables missing/empty                 | Serving API endpoints return appropriate error or empty state  |
 | Serving API called before any pipeline run | Freshness/status endpoints handle gracefully (empty/unknown)  |
 | MCP `get_load_trends(hourly)` over more than 7 days | Returns `validation_error`; request is not auto-shortened |
-| MCP request asks for whole-period top-region ranking | Returns `unsupported_capability` rather than per-day data misrepresented as a total leaderboard |
 | Valid MCP query returns no matching rows  | Returns success envelope with empty `data` and deterministic summary |
 | MCP freshness query with no freshness rows | Returns deterministic payload with `freshness_status = "unknown"` |
 
@@ -239,6 +238,7 @@ Prioritized by blast radius and likelihood of failure:
 - Invalid parameters return structured errors
 - MCP server starts in `stdio` mode and exposes the documented tools/resources
 - MCP tool/resource tests pass for registration, envelopes, normalization, and overflow behavior
+- `unsupported_capability` remains documented for contract stability, but v1 tests do not require a dedicated parameter-level trigger for it
 - No agent usability testing is required for MCP v1
 
 ### Phase 4 Complete When:

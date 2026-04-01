@@ -940,7 +940,7 @@ MCP tool responses preserve the same metadata semantics and additionally follow 
 - `data` preserves the structured underlying result
 - `metadata` carries `data_as_of`, `pipeline_run_id`, and `freshness_status`, and may include MCP-specific safety fields
 - The MCP adapter layer may add agent-oriented safety semantics such as truncation flags, defaults, normalization, and deterministic summaries, but it must not change the underlying metric definitions
-- Error categories should stay aligned with serving semantics, while MCP may add agent-facing boundary errors such as `unsupported_capability`
+- Error categories should stay aligned with serving semantics, while MCP may retain agent-facing boundary errors such as `unsupported_capability` for contract stability; in v1, current tool schemas do not need to expose a direct parameter-level trigger for every unsupported analytical intent described in prose
 
 ### Constraints
 - **Fixed-template endpoints only** — each endpoint maps to a predefined query against specific `agg_*` or `meta.*` tables

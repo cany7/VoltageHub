@@ -16,6 +16,9 @@ endif
 
 up:
 	$(DOCKER_COMPOSE) up -d
+	@echo "Waiting for $(AIRFLOW_SERVICE) to become ready for dbt deps..."
+	@until $(DOCKER_COMPOSE) exec -T $(AIRFLOW_SERVICE) true >/dev/null 2>&1; do sleep 2; done
+	$(MAKE) dbt-deps
 
 down:
 	$(DOCKER_COMPOSE) down

@@ -64,7 +64,7 @@ Recommended implementation approach for v1:
 - implement it in Python 3.11+
 - organize it as a dedicated package under `mcp/`
 - reuse shared repository / service logic from the serving layer
-- support both a clean local developer workflow and package-based distribution for agent hosts
+- support a clean local developer workflow that GitHub users can run after cloning the repo
 
 Recommended dependency direction:
 
@@ -125,9 +125,9 @@ The MCP server uses:
 Recommended runtime model for v1:
 
 - local development should use `uv run`
-- a typical local command shape is `cd mcp && uv run voltagehub-mcp`, or an equivalent package entrypoint defined in `pyproject.toml`
-- agent-host integration should prefer a published `uvx` package
-- a typical host-side startup shape is `uvx voltagehub-mcp`
+- a typical local command shape is `cd mcp && uv sync --dev && uv run voltagehub-mcp`
+- for this repository, agent-host integration should also use `uv run` from the checked-out `mcp/` directory because the MCP package is not published
+- a typical host-side startup shape is `command: "uv"` with `args: ["run", "voltagehub-mcp"]` and `cwd` pointing at `/absolute/path/to/voltage-hub/mcp`
 - in this model, the host application is responsible for executing the configured command and attaching to the MCP process over stdio; the model only uses the exposed tools/resources once the process is running
 
 Implications:
@@ -135,6 +135,7 @@ Implications:
 - no additional network port is required
 - no HTTP authentication layer is needed in this design
 - startup and operational model should stay simple
+- clone-and-run usage is realistic once the user has installed `uv`, synced dependencies in `mcp/`, and provided working GCP credentials
 
 ---
 
@@ -373,10 +374,13 @@ Tools should not silently return a partial dataset without indicating truncation
 
 Some requests may be well-formed but outside the capabilities of the serving design.
 
+In v1, this category is intentionally forward-compatible. The current documented tool parameter shapes do not expose an explicit scope parameter for every unsupported analytical intent. That means some unsupported intents can be described at the agent or natural-language level without being directly expressible as a distinct v1 tool invocation.
+
 Examples:
 
-- asking `get_top_demand_regions` for a whole-period cumulative leaderboard instead of per-day rankings
-- asking `get_generation_mix` for whole-period composition when only per-day share is defined
+- asking for a whole-period cumulative leaderboard when the documented tool only returns per-day rankings
+- asking for whole-period generation composition when the documented tool only defines per-day share
+- asking for fuzzy region search or alias expansion when v1 only supports canonical region values plus exact region-name normalization
 
 Recommended MCP-specific error category:
 
@@ -384,9 +388,15 @@ Recommended MCP-specific error category:
 
 Recommended behavior:
 
-- use `unsupported_capability` when the request shape is understandable but not supported by the current serving model
+- use `unsupported_capability` when a well-formed request shape is understandable but not supported by the current serving model
 - use `validation_error` when the request is malformed or violates a documented parameter rule
 - include a `hint` pointing to the closest supported query shape or alternative tool
+
+v1 clarification:
+
+- keep `unsupported_capability` as a documented category for interface stability and future explicit shape parameters
+- do not require every current v1 tool to have a directly triggerable `unsupported_capability` branch from its documented parameter set
+- when a tool is invoked with valid v1 parameters, it should normally return the documented supported shape rather than infer a different unsupported intent that was only present in upstream natural language
 
 ---
 
@@ -515,7 +525,6 @@ Size and safety rules:
 
 - estimated rows may be computed as `number_of_calendar_days_in_closed_interval × top_n`
 - if the requested date range would exceed the documented row budget, prefer `validation_error` over silent truncation
-- if the caller asks for a cumulative whole-period ranking, return `unsupported_capability`
 
 Result ordering:
 
@@ -820,14 +829,17 @@ Errors should be:
 Recommended error categories:
 
 - `validation_error` for malformed inputs or documented rule violations
-- `unsupported_capability` for well-formed requests that exceed the supported analytical shape
+- `unsupported_capability` as a reserved category for well-formed requests that exceed the supported analytical shape when such a shape is explicitly expressible in the interface
 - `repository_error` when warehouse access fails
 
 Examples of `unsupported_capability`:
 
-- asking for a cumulative whole-period top-regions leaderboard
-- asking for whole-period generation composition when only per-day composition is defined
 - asking for fuzzy region search or approximate alias matching when v1 only supports canonical region plus exact region-name normalization
+
+v1 note:
+
+- current v1 tool schemas may not expose a direct parameter-level path to every unsupported analytical intent described in prose
+- this category remains part of the interface contract so later MCP revisions can add explicit shape parameters without changing the error taxonomy
 
 Do not return raw stack traces or warehouse-specific internals in tool errors.
 
