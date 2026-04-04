@@ -28,7 +28,7 @@ The project turns raw EIA grid data into query-ready analytical tables and stabl
 - FastAPI serving layer backed by pre-aggregated warehouse tables rather than direct fact-table queries
 - stdio MCP interface for LLM agents that shares the same business semantics as the REST API
 
-## Demo
+## Demo and Benchmark
 
 The screenshots below show the full path from orchestration to warehouse outputs to serving.
 
@@ -55,6 +55,15 @@ Precomputed daily regional load metrics in the mart layer, ready for downstream 
 ![FastAPI analytical endpoint](assets/FastAPI.png)
 
 Shows analytical endpoints backed by precomputed warehouse outputs.
+
+### 5. Benchmark
+
+The local serving benchmark below was run with `curl` using single concurrency, `50` mixed requests, and `200` warm requests on the same cached parameters.
+
+- `/freshness`: p50 `531.8ms`, p95 `665.5ms`, p99 `776.5ms`
+- `/metrics/load`: cache miss `2232.4ms`; cache-hit p50 `1.7ms`, p95 `2.1ms`, p99 `3.4ms`
+- `/metrics/generation-mix`: cache miss `2024.2ms`; cache-hit p50 `1.6ms`, p95 `2.0ms`, p99 `2.5ms`
+- `/metrics/top-regions`: cache miss `1998.5ms`; cache-hit p50 `1.7ms`, p95 `2.1ms`, p99 `2.7ms`
 
 ## Architecture
 
@@ -167,6 +176,14 @@ make build && make up
 ```
 
 After that, trigger `eia_grid_batch` in Airflow to run the pipeline, then query the REST API at `http://localhost:8090`.
+
+To benchmark serving latency with `curl`, run:
+
+```bash
+uv run python tests/rest_api_latency_benchmark.py --base-url http://127.0.0.1:8090
+```
+
+The benchmark auto-discovers valid parameters from BigQuery and measures `/freshness`, `/metrics/load`, `/metrics/generation-mix`, and `/metrics/top-regions`.
 
 To start the MCP server locally, first configure `.env`, including `MCP_GCP_PROJECT_ID` and `MCP_GOOGLE_APPLICATION_CREDENTIALS`:
 

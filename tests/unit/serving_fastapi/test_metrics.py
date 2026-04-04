@@ -123,6 +123,7 @@ class StubMetricsService:
 class FakeMetricsRepository:
     def __init__(self) -> None:
         self.load_call_count = 0
+        self.metadata_call_count = 0
 
     def list_load_metrics(self, **_: object) -> list[dict[str, object]]:
         self.load_call_count += 1
@@ -144,6 +145,7 @@ class FakeMetricsRepository:
         return []
 
     def get_response_metadata(self) -> dict[str, object]:
+        self.metadata_call_count += 1
         return {
             "freshness": {
                 "data_freshness_timestamp": datetime(2026, 3, 28, 9, 0, tzinfo=UTC),
@@ -399,6 +401,7 @@ def test_metrics_service_caches_repeated_load_requests_within_ttl() -> None:
     )
 
     assert repository.load_call_count == 1
+    assert repository.metadata_call_count == 1
     assert first_response == second_response
 
 

@@ -110,7 +110,10 @@ class MetricsService:
         )
 
     def _build_metadata(self) -> ResponseMetadata:
-        metadata = self.repository.get_response_metadata()
+        metadata = self.cache.get_or_set(
+            ("metrics.response_metadata",),
+            self.repository.get_response_metadata,
+        )
         if metadata is None:
             return ResponseMetadata(
                 data_as_of=None,

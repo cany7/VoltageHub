@@ -28,7 +28,7 @@
 - FastAPI 服务层直接查询预聚合仓库表，而非临时聚合事实表
 - 面向 LLM Agent 的 `stdio` MCP 接口，与 REST 服务层共享同一套业务语义
 
-## 演示
+## 演示与基准测试
 
 下方截图展示了项目从任务编排、仓库产出到服务输出的完整链路。
 
@@ -55,6 +55,15 @@
 ![FastAPI analytical endpoint](/assets/FastAPI.png)
 
 展示了由数据仓库预计算结果驱动的分析接口。
+
+### 5. 基准测试
+
+下面的本地服务基准测试使用 `curl` 执行，采用单并发、`50` 次 mixed run 和 `200` 次 warm run，并重复命中同一组缓存参数。
+
+- `/freshness`：p50 `531.8ms`，p95 `665.5ms`，p99 `776.5ms`
+- `/metrics/load`：cache miss `2232.4ms`；cache-hit p50 `1.7ms`，p95 `2.1ms`，p99 `3.4ms`
+- `/metrics/generation-mix`：cache miss `2024.2ms`；cache-hit p50 `1.6ms`，p95 `2.0ms`，p99 `2.5ms`
+- `/metrics/top-regions`：cache miss `1998.5ms`；cache-hit p50 `1.7ms`，p95 `2.1ms`，p99 `2.7ms`
 
 ## 架构
 
@@ -167,6 +176,14 @@ make build && make up
 ```
 
 完成上述步骤后，在 Airflow 中触发 `eia_grid_batch` 即可运行管道，随后可访问 `http://localhost:8090` 查看 REST API 返回的数据。
+
+如果要用 `curl` 做 REST API 延迟基准测试，可执行：
+
+```bash
+uv run python tests/rest_api_latency_benchmark.py --base-url http://127.0.0.1:8090
+```
+
+脚本会从 BigQuery 自动选择可用参数，并测量 `/freshness`、`/metrics/load`、`/metrics/generation-mix` 和 `/metrics/top-regions`。
 
 如果要在本地启动 MCP 服务，请先在 `.env` 中配置 `MCP_GCP_PROJECT_ID` 和 `MCP_GOOGLE_APPLICATION_CREDENTIALS`，再执行：
 

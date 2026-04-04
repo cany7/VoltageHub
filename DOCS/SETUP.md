@@ -235,6 +235,15 @@ VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 .venv/bin/pytest -rs tests/integration/test_ser
 
 Requires populated BigQuery tables from a prior pipeline run. Tests all endpoints (`/health`, `/freshness`, `/pipeline/status`, `/anomalies`, `/metrics/*`) against real data, including response metadata validation and error handling.
 
+### 8.8 Serving API Latency Benchmark
+
+```bash
+set -a; source .env; set +a
+uv run python tests/rest_api_latency_benchmark.py --base-url http://127.0.0.1:8090
+```
+
+The benchmark uses real BigQuery data to auto-select valid parameters and drives the API with `curl`. Pass `--restart-command "<your restart command>"` if you want a true cold-start reset between endpoints.
+
 ---
 
 ## 9. Troubleshooting

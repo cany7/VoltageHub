@@ -236,6 +236,15 @@ VOLTAGE_HUB_RUN_PIPELINE_TESTS=1 .venv/bin/pytest -rs tests/integration/test_ser
 
 前提条件：BigQuery 中已有 pipeline 产出的数据。测试覆盖全部端点（`/health`、`/freshness`、`/pipeline/status`、`/anomalies`、`/metrics/*`），包括响应元数据验证和错误处理。
 
+### 8.8 Serving API 延迟基准测试
+
+```bash
+set -a; source .env; set +a
+uv run python tests/rest_api_latency_benchmark.py --base-url http://127.0.0.1:8090
+```
+
+脚本会从 BigQuery 自动选择可用参数，并用 `curl` 测量目标端点。若希望每个端点前都执行一次真正的冷启动重置，可传入 `--restart-command "<你的重启命令>"`。
+
 ---
 
 ## 9. 问题排查
